@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PARENT="$(cd "$HERE/.." && pwd)"
+BACKEND="auto"
+OSC_ENABLED="false"
+SA3_ROOT_VALUE="${SA3_ROOT:-$PARENT}"
+PREV=""
+for ARG in "$@"; do
+  if [[ "$PREV" == "--backend" ]]; then BACKEND="$ARG"; fi
+  if [[ "$PREV" == "--sa3-root" ]]; then SA3_ROOT_VALUE="$ARG"; fi
+  case "$ARG" in
+    --backend=*) BACKEND="${ARG#*=}" ;;
+    --sa3-root=*) SA3_ROOT_VALUE="${ARG#*=}" ;;
+    --osc) OSC_ENABLED="true" ;;
+  esac
+  PREV="$ARG"
+done
+
+if [[ -n "${SA3_MONITOR_PYTHON:-}" ]]; then
+  PY="$SA3_MONITOR_PYTHON"
+elif [[ "$BACKEND" == "mlx" && -x "$SA3_ROOT_VALUE/optimized/mlx/.venv/bin/python" ]]; then
+  PY="$SA3_ROOT_VALUE/optimized/mlx/.venv/bin/python"
+elif [[ "$BACKEND" == "auto" && "$(uname -s)" == "Darwin" && -x "$SA3_ROOT_VALUE/optimized/mlx/.venv/bin/python" ]]; then
+  PY="$SA3_ROOT_VALUE/optimized/mlx/.venv/bin/python"
+elif [[ -x "$SA3_ROOT_VALUE/.venv/bin/python" ]]; then
+  PY="$SA3_ROOT_VALUE/.venv/bin/python"
+elif [[ -x "$PARENT/.venv/bin/python" ]]; then
+  PY="$PARENT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="$(command -v python3)"
+else
+  echo "Python 3.10+ was not found. Set SA3_MONITOR_PYTHON to the SA3 environment's Python." >&2
+  exit 1
+fi
+
+if ! "$PY" -c 'import sys; raise SystemExit(sys.version_info < (3,10))'; then
+  echo "SA3 Monitor requires Python 3.10 or newer; selected interpreter: $PY" >&2
+  exit 1
+fi
+
+NEEDS_MONITOR_DEPS="false"
+if ! "$PY" -c 'import fastapi, uvicorn, multipart' >/dev/null 2>&1; then
+  NEEDS_MONITOR_DEPS="true"
+fi
+if [[ "$OSC_ENABLED" == "true" ]] && ! "$PY" -c 'import pythonosc' >/dev/null 2>&1; then
+  NEEDS_MONITOR_DEPS="true"
+fi
+if [[ "$NEEDS_MONITOR_DEPS" == "true" ]]; then
+  echo "Installing the small browser-monitor dependencies into: $PY"
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$PY" -r "$HERE/requirements-monitor.txt"
+  else
+    "$PY" -m pip install -r "$HERE/requirements-monitor.txt"
+  fi
+fi
+
+export SA3_ROOT="$SA3_ROOT_VALUE"
+exec "$PY" "$HERE/server.py" "$@"
