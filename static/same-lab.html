@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAME Latent Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#000;--panel:#080808;--line:#333;--text:#f4f4f4;--muted:#999;--dim:#666}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+header{position:sticky;top:0;z-index:5;background:#000;border-bottom:1px solid var(--line);padding:16px 22px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+h1,h2,h3,p{margin:0}h1{font-size:17px;font-weight:600}h2{font-size:15px;margin-bottom:14px}h3{font-size:13px;margin:14px 0 8px}
+nav{margin-left:auto;display:flex;gap:14px}a{color:#fff;text-decoration:underline;text-underline-offset:3px}.diag{display:flex;gap:14px;color:var(--muted);font-size:12px}
+main{max-width:1500px;margin:auto;padding:22px}.panel{border:1px solid var(--line);padding:16px;margin-bottom:14px;background:var(--panel)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}.span3{grid-column:span 3}.span4{grid-column:span 4}.span6{grid-column:span 6}.span8{grid-column:span 8}.span12{grid-column:span 12}
+label{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+input,select,button{width:100%;background:#000;color:#fff;border:1px solid #555;border-radius:0;padding:9px;font:inherit}input[type=checkbox]{width:auto}button{cursor:pointer}button:hover:not(:disabled){background:#fff;color:#000}button:disabled{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.check{display:flex;gap:8px;align-items:center;padding-top:22px}.check label{margin:0;text-transform:none}
+.status{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;color:#ccc;min-height:34px}.error{color:#fff;background:#270000;border:1px solid #800;padding:10px;display:none;margin-top:10px}
+.osc-state{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.osc-state button{width:auto;min-width:170px}.osc-indicator{border:1px solid #555;padding:8px 10px;color:#aaa}.osc-indicator.armed{border-color:#fff;color:#fff}.addresses{white-space:pre-wrap;font-size:11px;color:#aaa;border:1px solid #333;padding:10px;margin-top:10px}
+.audio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}audio{width:100%;height:36px;filter:grayscale(1)}
+.plots{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}canvas{width:100%;height:260px;image-rendering:pixelated;border:1px solid var(--line);background:#000}.plot-title{font-size:11px;color:var(--muted);margin-bottom:5px}
+details{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}summary{cursor:pointer;color:#ddd}
+.fader-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.fader-tools button{width:auto;min-width:90px}.fader-tools input{width:100px}
+.faders{display:flex;gap:2px;overflow-x:auto;padding:8px 0 14px;border:1px solid var(--line);background:#000}.fader{flex:0 0 30px;text-align:center}.fader small{display:block;color:#777;font-size:8px}.fader input{writing-mode:vertical-lr;direction:rtl;width:25px;height:155px;padding:0;border:0;accent-color:#fff}
+table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:right;border-bottom:1px solid #222;padding:5px}th:first-child,td:first-child{text-align:left}
+.help{color:var(--muted);font-size:12px;margin:5px 0 12px}.busy{animation:blink 1s steps(2,end) infinite}@keyframes blink{50%{opacity:.35}}
+@media(max-width:900px){.span3,.span4,.span6,.span8{grid-column:span 12}.audio-grid,.plots{grid-template-columns:1fr}header{position:static}.diag{width:100%;flex-wrap:wrap}nav{margin-left:0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>SAME Latent Lab</h1>
+  <div class="diag"><span id="backend">backend —</span><span id="device">device —</span><span id="dtype">dtype —</span><span id="vram">VRAM —</span></div>
+  <nav><a href="/">Home</a><a href="/monitor">Graphical Pipeline Monitor</a><a href="/sfx-matrix">SFX Matrix</a><a href="/drift">Drift Looper</a><a href="/loop-mutator">Loop Mutator</a></nav>
+</header>
+<main>
+  <section class="panel">
+    <h2>Source</h2>
+    <p class="help">Audio → SAME → 256-channel latent × time → edit → SAME → audio. Models and files remain on this host.</p>
+    <div class="grid">
+      <div class="span6"><label for="sourceA">Source A</label><input id="sourceA" type="file" accept="audio/*"></div>
+      <div class="span3"><label for="codec">Codec</label><select id="codec"><option value="same-l">SAME-L · higher quality</option><option value="same-s">SAME-S · faster</option></select></div>
+      <div class="span3"><label>&nbsp;</label><button id="encodeA">Encode / reconstruct A</button></div>
+      <div class="span6"><label for="sourceB">Source B · optional, exactly same length</label><input id="sourceB" type="file" accept="audio/*"></div>
+      <div class="span3"><label>&nbsp;</label><button id="encodeB" disabled>Encode / reconstruct B</button></div>
+      <div class="span3"><label>Session</label><input id="session" readonly value="—"></div>
+    </div>
+    <div id="error" class="error"></div><div id="status" class="status">Choose Source A and encode it.</div>
+  </section>
+
+  <section class="panel">
+    <h2>OSC control</h2>
+    <div class="osc-state"><button id="armOsc" disabled>Arm this session for OSC</button><span id="oscIndicator" class="osc-indicator">OSC status loading…</span></div>
+    <p class="help" style="margin-top:10px">Only the armed browser session receives OSC. Arm sessions one at a time. Parameter messages update controls; render messages explicitly run a decode.</p>
+    <details><summary>Common OSC addresses</summary><div class="addresses">/same/set/channels "0-31,64"
+/same/set/start 0.0
+/same/set/end 2.0
+/same/set/operation "lfo_add"
+/same/set/lfo_period 8.0
+/same/set/lfo_depth 0.75
+/same/set/waveform "Sawtooth"
+/same/action/apply_intervention
+
+/same/mix/12 0.75
+/same/mix/all 0.5
+/same/mix/apply
+
+/same/profile/12 -0.4
+/same/profile/random 0.5 42
+/same/profile/apply
+/same/reset</div></details>
+  </section>
+
+  <section class="panel">
+    <h2>Audition</h2>
+    <div class="audio-grid">
+      <div><label>Untouched reconstruction</label><audio id="baseline" controls loop></audio></div>
+      <div><label>Active edited reconstruction</label><audio id="current" controls loop></audio></div>
+      <div><label>Difference · normalized</label><audio id="difference" controls loop></audio></div>
+    </div>
+    <div style="margin-top:12px"><a id="latentDownload" href="#" download>Download current latent .npy</a></div>
+  </section>
+
+  <section class="panel">
+    <h2>Latent views</h2>
+    <div class="plots">
+      <div><div class="plot-title">Original</div><canvas id="originalPlot"></canvas></div>
+      <div><div class="plot-title">Working</div><canvas id="currentPlot"></canvas></div>
+      <div><div class="plot-title">Difference</div><canvas id="deltaPlot"></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Latent intervention</h2>
+    <div class="grid">
+      <div class="span3"><label for="channels">Channels</label><input id="channels" value="0"></div>
+      <div class="span6"><label for="operation">Operation</label><select id="operation"></select></div>
+      <div class="span3"><label for="amount">Amount</label><input id="amount" type="number" value="0" min="-3" max="3" step="0.05"></div>
+      <div class="span3"><label for="start">Start time · seconds</label><input id="start" type="number" value="0" min="0" step="0.001"></div>
+      <div class="span3"><label for="end">End time · seconds</label><input id="end" type="number" value="1" min="0" step="0.001"></div>
+      <div class="span3"><label for="seed">Random seed</label><input id="seed" type="number" value="0" step="1"></div>
+      <div class="span3 check"><input id="cumulative" type="checkbox"><label for="cumulative">Apply cumulatively</label></div>
+      <div class="span3"><label for="displacement">Displacement · frames</label><input id="displacement" type="number" value="1" step="1"></div>
+      <div class="span3"><label>&nbsp;</label><button class="editButton" id="applyIntervention" disabled>Apply + decode</button></div>
+      <div class="span3"><label>&nbsp;</label><button class="editButton" id="reset" disabled>Reset working latent</button></div>
+    </div>
+    <details open>
+      <summary>LFO controls</summary>
+      <div class="grid" style="margin-top:12px">
+        <div class="span3"><label for="bpm">BPM</label><input id="bpm" type="number" value="120" min="0.01" step="0.01"></div>
+        <div class="span3"><label for="beats">Beats per cycle</label><input id="beats" type="number" value="1" min="0.001" step="0.001"></div>
+        <div class="span3"><label for="periodSeconds">Period · seconds</label><input id="periodSeconds" type="number" value="0.5" min="0.001" step="0.001"></div>
+        <div class="span3"><label for="lfoPeriod">Period · latent frames</label><input id="lfoPeriod" type="number" value="5.3833" min="0.01" step="0.001"></div>
+        <div class="span3"><label for="lfoDepth">Depth</label><input id="lfoDepth" type="number" value="1" min="0" step="0.01"></div>
+        <div class="span3"><label for="waveform">Waveform</label><select id="waveform"></select></div>
+        <div class="span3"><label for="phase">Start phase · degrees</label><input id="phase" type="number" value="0" min="0" max="360" step="1"></div>
+        <div class="span3 check"><input id="invertLfo" type="checkbox"><label for="invertLfo">Invert polarity</label></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>Two-source latent mixer</h2>
+    <p class="help">Each fader controls one latent channel for the whole sound: 0 = Source A, 1 = Source B.</p>
+    <div class="fader-tools">
+      <button data-mix="0">All A</button><button data-mix="0.5">Centre</button><button data-mix="1">All B</button>
+      <button id="flipMix">Flip</button><input id="mixSeed" type="number" value="0"><button id="randomMix">Random</button>
+      <button class="editButton requiresB" id="applyMix" disabled>Apply A/B mix + decode</button>
+    </div>
+    <div id="mixFaders" class="faders"></div>
+    <details>
+      <summary>Time-ramped crossfade</summary>
+      <div class="grid" style="margin-top:12px">
+        <div class="span4"><label for="direction">Direction</label><select id="direction"><option>A to B</option><option>B to A</option></select></div>
+        <div class="span4"><label for="curve">Curve</label><select id="curve"><option>Smoothstep</option><option>Linear</option></select></div>
+        <div class="span4"><label>&nbsp;</label><button class="editButton requiresB" id="applyCrossfade" disabled>Crossfade + decode</button></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <h2>256-channel offset / multiplier bank</h2>
+    <p class="help">Offset adds each fader value. Multiply applies 1 + value. Zero is neutral.</p>
+    <div class="grid" style="margin-bottom:10px">
+      <div class="span3"><label for="profileMode">Mode</label><select id="profileMode"><option>Offset</option><option>Multiply</option></select></div>
+      <div class="span3"><label for="profileValue">Set-all value</label><input id="profileValue" type="number" value="0" min="-3" max="3" step="0.01"></div>
+      <div class="span3"><label for="profileDepth">Random depth</label><input id="profileDepth" type="number" value="0.25" min="0" max="3" step="0.01"></div>
+      <div class="span3"><label for="profileSeed">Random seed</label><input id="profileSeed" type="number" value="0" step="1"></div>
+    </div>
+    <div class="fader-tools"><button id="neutralProfile">Neutral</button><button id="setProfile">Set all</button><button id="invertProfile">Invert</button><button id="randomProfile">Random</button><button class="editButton" id="applyProfile" disabled>Apply profile + decode</button></div>
+    <div id="profileFaders" class="faders"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Most variable channels</h2>
+    <table><thead><tr><th>channel</th><th>mean</th><th>std</th><th>rms</th><th>mean |Δtime|</th></tr></thead><tbody id="stats"></tbody></table>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let sessionId=null,busy=false,framesPerSecond=44100/4096,oscEnabled=false,oscRevision=-1,lastOscResult='';
+const state={mix:[],profile:[]};
+function makeFaders(container,values,min,max,step){container.textContent='';values.length=0;for(let i=0;i<256;i++){values.push(0);const box=document.createElement('div');box.className='fader';const label=document.createElement('small');label.textContent=i;const input=document.createElement('input');input.type='range';input.min=min;input.max=max;input.step=step;input.value=0;input.dataset.index=i;input.addEventListener('input',()=>values[i]=Number(input.value));box.append(label,input);container.append(box)}}
+makeFaders($('mixFaders'),state.mix,0,1,.01);makeFaders($('profileFaders'),state.profile,-3,3,.01);
+function syncFaders(container,values){[...container.querySelectorAll('input')].forEach((x,i)=>x.value=values[i])}
+function setBank(container,values,value){values.fill(Math.max(Number(container.querySelector('input').min),Math.min(Number(container.querySelector('input').max),Number(value))));syncFaders(container,values)}
+function showError(message=''){$('error').style.display=message?'block':'none';$('error').textContent=message}
+function setBusy(value,label){busy=value;document.querySelectorAll('button').forEach(b=>b.disabled=value||((b.classList.contains('editButton')||b.id==='encodeB')&&!sessionId)||(b.classList.contains('requiresB')&&b.dataset.ready!=='true')||(b.id==='armOsc'&&(!oscEnabled||!sessionId)));$('status').classList.toggle('busy',value);if(value)$('status').textContent=label}
+function audioSrc(player,url,autoplay=false){if(!url)return;if(player.dataset.url===url)return;player.dataset.url=url;player.src=url;player.load();if(autoplay)player.play().catch(()=>{})}
+function drawHeatmap(canvas,hm,delta=false){const ctx=canvas.getContext('2d');canvas.width=hm.w;canvas.height=hm.h;const image=ctx.createImageData(hm.w,hm.h);for(let i=0;i<hm.data.length;i++){const v=hm.data[i]/255;let r,g,b;if(delta){r=v>.5?255:Math.round(v*510);b=v<.5?255:Math.round((1-v)*510);g=Math.round(255-Math.abs(v-.5)*510)}else{r=g=b=Math.round(v*255)}image.data.set([r,g,b,255],i*4)}ctx.putImageData(image,0,0)}
+function applyResult(data,autoplay=true){sessionId=data.session_id;$('session').value=sessionId;$('end').value=data.duration.toFixed(6);$('end').max=data.duration;$('start').max=data.duration;$('status').textContent=data.status;framesPerSecond=data.frames_per_second;audioSrc($('baseline'),data.audio.baseline);audioSrc($('current'),data.audio.current,autoplay);audioSrc($('difference'),data.audio.difference);$('latentDownload').href=data.latent_url;drawHeatmap($('originalPlot'),data.original_heatmap);drawHeatmap($('currentPlot'),data.current_heatmap);drawHeatmap($('deltaPlot'),data.delta_heatmap,true);$('stats').innerHTML=data.stats.map(x=>`<tr><td>${x.channel}</td><td>${x.mean.toFixed(4)}</td><td>${x.std.toFixed(4)}</td><td>${x.rms.toFixed(4)}</td><td>${x.movement.toFixed(4)}</td></tr>`).join('');document.querySelectorAll('.requiresB').forEach(b=>b.dataset.ready=data.has_source_b?'true':'false');document.querySelectorAll('.editButton:not(.requiresB)').forEach(b=>b.disabled=false);document.querySelectorAll('.requiresB').forEach(b=>b.disabled=!data.has_source_b);$('encodeB').disabled=false;$('armOsc').disabled=!oscEnabled}
+async function encode(source){showError();const file=$(source==='a'?'sourceA':'sourceB').files[0];if(!file){showError(`Choose Source ${source.toUpperCase()} first.`);return}if(source==='b'&&!sessionId)return;const form=new FormData();form.append('codec',$('codec').value);form.append('source',source);form.append('session_id',sessionId||'');form.append('audio',file);setBusy(true,`Encoding Source ${source.toUpperCase()}…`);try{const response=await fetch('/api/same/encode',{method:'POST',body:form});const data=await response.json();if(!response.ok)throw new Error(data.detail||response.statusText);applyResult(data,source==='a')}catch(error){showError(error.message);$('status').textContent='Encode failed.'}finally{setBusy(false)}}
+async function edit(payload,label){if(!sessionId||busy)return;showError();setBusy(true,label);try{const response=await fetch(`/api/same/edit/${sessionId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.detail||response.statusText);applyResult(data,true)}catch(error){showError(error.message);$('status').textContent='Edit failed.'}finally{setBusy(false)}}
+function mirrorOscControls(c){if(!c)return;const mapping={channels:'channels',start:'start',end:'end',operation:'operation',amount:'amount',frame_displacement:'displacement',seed:'seed',bpm:'bpm',cycle_beats:'beats',period_seconds:'periodSeconds',lfo_period:'lfoPeriod',lfo_depth:'lfoDepth',lfo_waveform:'waveform',lfo_phase:'phase',crossfade_direction:'direction',crossfade_curve:'curve',profile_mode:'profileMode',profile_set_value:'profileValue',profile_random_depth:'profileDepth',profile_random_seed:'profileSeed',mix_random_seed:'mixSeed'};for(const [key,id] of Object.entries(mapping))if(c[key]!==undefined)$(id).value=c[key];$('cumulative').checked=!!c.cumulative;$('invertLfo').checked=!!c.lfo_invert}
+function updateOscStatus(data){const indicator=$('oscIndicator');indicator.classList.toggle('armed',data.armed);indicator.textContent=data.armed?`ARMED · UDP ${data.host}:${data.port}${data.busy?' · rendering…':''}`:`OSC available · UDP ${data.host}:${data.port} · not armed`;if(data.error)showError(`OSC: ${data.error}`);$('armOsc').textContent=data.armed?'Disarm this OSC session':'Arm this session for OSC'}
+async function pollOsc(){if(!oscEnabled||!sessionId)return;try{const response=await fetch(`/api/same/osc/status/${sessionId}`);if(!response.ok)return;const data=await response.json();updateOscStatus(data);if(data.revision===oscRevision)return;oscRevision=data.revision;mirrorOscControls(data.controls);if(Array.isArray(data.mix)&&data.mix.length===256){state.mix.splice(0,256,...data.mix);syncFaders($('mixFaders'),state.mix)}if(Array.isArray(data.profile)&&data.profile.length===256){state.profile.splice(0,256,...data.profile);syncFaders($('profileFaders'),state.profile)}const resultUrl=data.result?.audio?.current;if(resultUrl&&resultUrl!==lastOscResult){lastOscResult=resultUrl;applyResult(data.result,true)}}catch(_){}}
+async function toggleOsc(){if(!oscEnabled||!sessionId)return;const armed=$('oscIndicator').classList.contains('armed');try{const response=await fetch(`/api/same/osc/${armed?'disarm':'arm'}/${sessionId}`,{method:'POST'});const data=await response.json();if(!response.ok)throw new Error(data.detail||response.statusText);oscRevision=-1;updateOscStatus(data);pollOsc()}catch(error){showError(error.message)}}
+async function init(){try{const response=await fetch('/api/same/info');const info=await response.json();if(!response.ok)throw new Error(info.detail||response.statusText);$('backend').textContent=`backend ${info.backend.backend}`;$('device').textContent=info.backend.device_name;$('dtype').textContent=info.backend.dtype;const total=info.backend.vram_total_bytes||0;$('vram').textContent=total?`VRAM ${(total/2**30).toFixed(1)} GB`:'unified memory';$('codec').innerHTML=info.codecs.map(x=>`<option value="${x}">${x==='same-l'?'SAME-L · higher quality':'SAME-S · faster'}</option>`).join('');$('operation').innerHTML=info.operations.map(x=>`<option>${x}</option>`).join('');$('waveform').innerHTML=info.waveforms.map(x=>`<option>${x}</option>`).join('');oscEnabled=!!info.osc?.enabled;$('oscIndicator').textContent=oscEnabled?`OSC available · UDP ${info.osc.host}:${info.osc.port}`:'OSC disabled · restart server with --osc';$('armOsc').disabled=!oscEnabled||!sessionId}catch(error){showError(`Backend unavailable: ${error.message}`)}}
+$('encodeA').onclick=()=>encode('a');$('encodeB').onclick=()=>encode('b');
+$('applyIntervention').onclick=()=>edit({action:'intervention',channels:$('channels').value,operation:$('operation').value,amount:Number($('amount').value),start:Number($('start').value),end:Number($('end').value),seed:Number($('seed').value),cumulative:$('cumulative').checked,frame_displacement:Number($('displacement').value),lfo_period:Number($('lfoPeriod').value),lfo_depth:Number($('lfoDepth').value),lfo_waveform:$('waveform').value,lfo_phase:Number($('phase').value),lfo_invert:$('invertLfo').checked},'Applying latent intervention…');
+$('reset').onclick=()=>edit({action:'reset'},'Resetting latent…');
+document.querySelectorAll('[data-mix]').forEach(b=>b.onclick=()=>setBank($('mixFaders'),state.mix,b.dataset.mix));
+$('flipMix').onclick=()=>{state.mix.forEach((x,i)=>state.mix[i]=1-x);syncFaders($('mixFaders'),state.mix)};
+$('randomMix').onclick=()=>{let seed=Number($('mixSeed').value)>>>0;const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296};state.mix.forEach((_,i)=>state.mix[i]=rand());syncFaders($('mixFaders'),state.mix)};
+$('applyMix').onclick=()=>edit({action:'mix',values:state.mix},'Mixing 256 latent channels…');
+$('applyCrossfade').onclick=()=>edit({action:'crossfade',start:Number($('start').value),end:Number($('end').value),direction:$('direction').value,curve:$('curve').value},'Applying latent crossfade…');
+$('neutralProfile').onclick=()=>setBank($('profileFaders'),state.profile,0);$('setProfile').onclick=()=>setBank($('profileFaders'),state.profile,$('profileValue').value);
+$('invertProfile').onclick=()=>{state.profile.forEach((x,i)=>state.profile[i]=-x);syncFaders($('profileFaders'),state.profile)};
+$('randomProfile').onclick=()=>{let seed=Number($('profileSeed').value)>>>0,depth=Math.max(0,Number($('profileDepth').value));const rand=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296};state.profile.forEach((_,i)=>state.profile[i]=Math.max(-3,Math.min(3,(rand()*2-1)*depth)));syncFaders($('profileFaders'),state.profile)};
+$('applyProfile').onclick=()=>edit({action:'profile',values:state.profile,mode:$('profileMode').value,start:Number($('start').value),end:Number($('end').value),cumulative:$('cumulative').checked},'Applying 256-channel profile…');
+function fromBeats(){const seconds=60*Number($('beats').value)/Number($('bpm').value);$('periodSeconds').value=seconds.toFixed(6);$('lfoPeriod').value=(seconds*framesPerSecond).toFixed(6)}
+function fromSeconds(){$('beats').value=(Number($('periodSeconds').value)*Number($('bpm').value)/60).toFixed(6);$('lfoPeriod').value=(Number($('periodSeconds').value)*framesPerSecond).toFixed(6)}
+function fromFrames(){const seconds=Number($('lfoPeriod').value)/framesPerSecond;$('periodSeconds').value=seconds.toFixed(6);$('beats').value=(seconds*Number($('bpm').value)/60).toFixed(6)}
+$('armOsc').onclick=toggleOsc;$('bpm').onchange=fromBeats;$('beats').onchange=fromBeats;$('periodSeconds').onchange=fromSeconds;$('lfoPeriod').onchange=fromFrames;setInterval(pollOsc,500);init();
+</script>
+</body>
+</html>

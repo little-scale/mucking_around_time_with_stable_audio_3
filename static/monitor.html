@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SA3 Graphical Pipeline Monitor</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#070a11;--panel:#0c121d;--panel2:#101827;--line:#243149;--text:#e9eef9;--muted:#8795ac;
+  --blue:#43a5ff;--cyan:#38e2d0;--purple:#9f6bff;--pink:#ff4fb5;--green:#56e38b;--orange:#ffad52;--red:#ff6c7d;
+}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 15% -10%,#16213c 0,transparent 28%),var(--bg);font:14px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text)}
+button,input,textarea,select{font:inherit;color:inherit} button{cursor:pointer}
+.app{max-width:1800px;margin:auto;padding:18px}
+header{display:flex;gap:18px;align-items:flex-end;justify-content:space-between;margin-bottom:14px}
+h1{font-size:30px;margin:0;letter-spacing:-.025em}.sa3{background:linear-gradient(90deg,#4aa6ff,#a86fff,#ff62c3);-webkit-background-clip:text;color:transparent}.subtitle{color:#a8b4c8;margin-top:4px;font-size:14px}.topmeta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.pill{background:#0d1522;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:#aab7cb}.pill b{color:#fff;font-weight:600}
+.layout{display:grid;grid-template-columns:minmax(310px,390px) 1fr;gap:12px}.card{background:linear-gradient(180deg,rgba(17,25,40,.96),rgba(9,14,24,.96));border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 28px #0005}.controls{padding:14px;position:sticky;top:10px;align-self:start}.section-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;margin:2px 0 10px}.badge{display:grid;place-items:center;width:23px;height:23px;border-radius:6px;background:#166fc2;color:white;font-weight:800}.field{margin:9px 0}.field label{display:block;color:#9eacc0;font-size:12px;margin-bottom:5px}.field input,.field textarea,.field select{width:100%;background:#08101b;border:1px solid #2a3850;border-radius:8px;padding:9px 10px;outline:none}.field textarea{resize:vertical;min-height:76px}.field input:focus,.field textarea:focus,.field select:focus{border-color:#4aa6ff;box-shadow:0 0 0 2px #2688ff24}.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.drop{border:1.5px dashed #31537f;border-radius:10px;padding:16px;text-align:center;color:#93a8c4;background:#07111f;transition:.15s}.drop.drag{border-color:var(--cyan);background:#0b1a26}.drop .big{font-size:24px}.drop small{display:block;color:#687a94;margin-top:4px}.drop.has{border-style:solid;border-color:#2b795f}.drop button{margin-top:8px;border:1px solid #334969;background:#122137;border-radius:7px;padding:6px 9px}.input-wave{height:72px;width:100%;margin-top:9px;background:#060a10;border-radius:7px;border:1px solid #1e2b3d}.actions{display:flex;gap:8px;margin-top:12px}.primary{flex:1;border:0;background:linear-gradient(90deg,#287eef,#7b58ee);padding:11px 12px;border-radius:9px;font-weight:800}.primary:disabled{filter:saturate(.2);opacity:.55;cursor:not-allowed}.secondary{border:1px solid #34445e;background:#101a2b;padding:10px 12px;border-radius:9px}.help{font-size:11px;color:#718198;margin-top:6px}
+.main{min-width:0}.pipeline{display:grid;grid-template-columns:repeat(6,minmax(135px,1fr));gap:8px;margin-bottom:10px}.stage{min-height:105px;padding:10px;border:1px solid #243249;border-radius:10px;background:#0a111c;position:relative;overflow:hidden}.stage::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#243249}.stage.active{border-color:#4b75b3;box-shadow:0 0 18px #2b70d122}.stage.active::after{background:linear-gradient(90deg,var(--blue),var(--purple));animation:pulse 1s ease-in-out infinite alternate}.stage.done{border-color:#24583e}.stage.done::after{background:var(--green)}.stage.skipped{opacity:.5}.stage.error{border-color:#743644}.stage .n{font-size:11px;color:#6c7e98}.stage h3{font-size:13px;margin:3px 0 5px}.stage .status{font-size:11px;color:#8d9db4}.stage .shape{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#b9c8db;margin-top:8px;overflow-wrap:anywhere}.stage .ms{position:absolute;right:8px;top:8px;color:#ffd37d;font:11px ui-monospace,monospace}@keyframes pulse{to{filter:brightness(1.6)}}
+.monitor-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:10px}.monitor-card{padding:12px;min-width:0}.monitor-card h2{font-size:14px;margin:0 0 9px}.canvas-wrap{position:relative;background:#060910;border:1px solid #1d293b;border-radius:9px;overflow:hidden}.canvas-wrap canvas{display:block;width:100%;height:270px;image-rendering:pixelated}.canvas-label{position:absolute;left:8px;top:7px;font:11px ui-monospace,monospace;color:#d6dff0;background:#050912b8;padding:3px 6px;border-radius:5px}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}.stat{background:#09101b;border:1px solid #1c2a3d;border-radius:7px;padding:7px}.stat span{display:block;color:#71829b;font-size:10px}.stat b{font:12px ui-monospace,monospace}.chart{height:155px;width:100%;background:#060910;border:1px solid #1d293b;border-radius:9px}.embedding{height:160px!important}.lower{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.wave-card{padding:12px}.wave-card canvas{width:100%;height:115px;background:#060910;border:1px solid #1d293b;border-radius:8px;display:block}.audio-row{display:flex;gap:9px;align-items:center;margin-top:9px}.audio-row audio{width:100%}.download{border:1px solid #365072;background:#122139;border-radius:7px;padding:7px 10px;text-decoration:none;color:#dbeaff;white-space:nowrap}.console{margin-top:10px}.console summary{cursor:pointer;color:#91a2ba}.log{max-height:210px;overflow:auto;white-space:pre-wrap;background:#05080e;border:1px solid #1a2637;border-radius:8px;margin-top:7px;padding:9px;font:11px/1.45 ui-monospace,monospace;color:#9fb0c7}
+.statusbar{position:sticky;bottom:0;margin-top:10px;display:grid;grid-template-columns:1.2fr repeat(5,1fr);gap:1px;background:#26344a;border:1px solid #2c3a51;border-radius:10px;overflow:hidden;box-shadow:0 -8px 28px #0007}.status-cell{background:#0b121e;padding:8px 10px;min-width:0}.status-cell span{display:block;color:#71829a;font-size:10px}.status-cell b{font:12px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#66758a;margin-right:6px}.live-dot.on{background:#50df83;box-shadow:0 0 9px #50df83}.err{color:#ff7d8e!important}.error-panel{display:none;margin-top:10px;border:1px solid #743644;background:#160d12;border-radius:10px;padding:12px}.error-panel.show{display:block}.error-panel h2{margin:0 0 8px;font-size:14px;color:#ff9bab}.error-message{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#ffd5dc;margin-bottom:8px;white-space:pre-wrap}.error-trace{max-height:320px;overflow:auto;background:#07090d;border:1px solid #38202a;border-radius:7px;padding:10px;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;color:#d6c7ce}.debug-link{display:inline-block;margin-top:8px;color:#90b8ff;font:11px ui-monospace,monospace}
+
+.batch-config{margin-top:12px;border-top:1px solid #223149;padding-top:10px}.batch-config summary{cursor:pointer;font-weight:700;color:#c9d5e8;margin-bottom:8px}.batch-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.batch-wide{grid-column:1/-1}.batch-actions{display:flex;gap:8px;margin-top:9px}.batch-actions button{border:1px solid #34445e;background:#101a2b;padding:8px 10px;border-radius:8px}.batch-actions .go{background:linear-gradient(90deg,#147f78,#4a68d8);border:0;font-weight:800;flex:1}.batch-actions button:disabled{opacity:.45;cursor:not-allowed}.results-card{margin-top:10px;padding:12px}.results-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.results-head h2{font-size:14px;margin:0}.results-tools{display:flex;gap:7px;align-items:center}.results-tools button,.results-tools a{border:1px solid #33445f;background:#101a2b;color:#dce8fb;border-radius:7px;padding:6px 9px;text-decoration:none;font-size:12px}.batch-status{color:#91a2ba;font:11px ui-monospace,monospace}.result-layout{display:grid;grid-template-columns:minmax(390px,1.25fr) 1fr;gap:10px}.result-list{max-height:360px;overflow:auto;border:1px solid #1d293b;border-radius:9px;background:#070b12}.result-row{display:grid;grid-template-columns:32px 50px 1fr 68px 68px 86px 80px;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #172236;font-size:11px;cursor:pointer}.result-row:last-child{border-bottom:0}.result-row:hover{background:#0d1624}.result-row.selected{background:#12213a;box-shadow:inset 3px 0 #57a7ff}.result-row.error{background:#1b0d12}.result-row .idx{color:#71829a;font:11px ui-monospace}.result-row .state{font-weight:700}.result-row .state.complete{color:#55df87}.result-row .state.running{color:#ffcc73}.result-row .state.error{color:#ff7b8d}.mini-btn{border:1px solid #34445e;background:#0d1828;border-radius:6px;padding:4px 6px;color:#dce8fb;font-size:11px}.mini-btn:disabled{opacity:.35}.result-param{font:11px ui-monospace,monospace;color:#c8d3e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.audition{background:#080e18;border:1px solid #1d293b;border-radius:9px;padding:10px}.audition h3{font-size:13px;margin:0 0 7px}.audition canvas{width:100%;height:105px;background:#060910;border:1px solid #1d293b;border-radius:7px;display:block}.audition audio{width:100%;margin-top:8px}.audition-meta{white-space:pre-wrap;font:11px ui-monospace,monospace;color:#9fb0c7;margin-top:7px}.batch-progress{height:5px;background:#111b2a;border-radius:99px;overflow:hidden;margin-top:7px}.batch-progress>div{height:100%;width:0;background:linear-gradient(90deg,#38dcca,#806cff);transition:width .2s}.custom-help{font-size:10px;color:#687a94}.batch-values textarea{min-height:56px;font:11px ui-monospace,monospace}.batch-values input{font:11px ui-monospace,monospace}
+@media(max-width:1050px){.result-layout{grid-template-columns:1fr}.result-row{grid-template-columns:28px 46px 1fr 60px 60px 74px 68px}}
+
+@media(max-width:1050px){.layout{grid-template-columns:1fr}.controls{position:static}.pipeline{grid-template-columns:repeat(3,1fr)}.monitor-grid,.lower{grid-template-columns:1fr}.statusbar{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:620px){.app{padding:10px}.pipeline{grid-template-columns:repeat(2,1fr)}.row,.row3{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}header{align-items:flex-start;flex-direction:column}.topmeta{justify-content:flex-start}}
+
+/* Minimal monochrome interface chrome; diagnostic canvases retain their data colours. */
+:root{--bg:#000;--panel:#000;--panel2:#000;--line:#383838;--text:#fff;--muted:#aaa;--blue:#fff;--cyan:#fff;--purple:#fff;--pink:#fff;--green:#fff;--orange:#fff;--red:#fff}
+body{background:#000;color:#fff}.sa3{background:none;color:#fff}.subtitle,.pill,.field label,.drop,.drop small,.help,.stage .n,.stage .status,.console summary,.batch-status,.result-row .idx,.audition-meta,.status-cell span{color:#aaa}
+.pill,.card,.field input,.field textarea,.field select,.drop,.drop button,.input-wave,.primary,.secondary,.stage,.canvas-wrap,.stat,.chart,.wave-card canvas,.download,.log,.statusbar,.status-cell,.error-panel,.error-trace,.batch-actions button,.results-tools button,.results-tools a,.result-list,.result-row,.mini-btn,.audition,.audition canvas{background:#000;border-color:#383838;box-shadow:none}
+.pill,.card,.badge,.field input,.field textarea,.field select,.drop,.drop button,.input-wave,.primary,.secondary,.stage,.canvas-wrap,.stat,.chart,.wave-card canvas,.download,.log,.statusbar,.error-panel,.error-trace,.batch-actions button,.results-tools button,.results-tools a,.result-list,.mini-btn,.audition,.audition canvas{border-radius:0}
+.badge{background:#000;border:1px solid #fff;color:#fff}.primary,.batch-actions .go{background:#000;border:1px solid #fff;color:#fff}.primary:hover,.secondary:hover,.drop button:hover,.batch-actions button:hover,.results-tools button:hover,.results-tools a:hover,.mini-btn:hover,.download:hover{background:#fff;color:#000}.primary:disabled,.batch-actions button:disabled{filter:none;opacity:.35}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:#fff;box-shadow:0 0 0 1px #fff}.drop.drag,.drop.has{background:#000;border-color:#fff}.stage::after{background:#383838}.stage.active{border-color:#fff;box-shadow:none}.stage.active::after{background:#fff;animation:pulse 1s ease-in-out infinite alternate}.stage.done{border-color:#666}.stage.done::after{background:#fff}.stage.error{border-color:#fff;border-style:dashed}.stage .ms{color:#fff}.canvas-label{background:#000;color:#fff;border:1px solid #383838;border-radius:0}
+.statusbar{background:#383838}.live-dot,.live-dot.on{background:#fff;box-shadow:none}.err,.error-panel h2,.error-message,.error-trace,.debug-link,.result-row .state.complete,.result-row .state.running,.result-row .state.error{color:#fff!important}.error-panel{background:#000;border-style:dashed}.result-row:hover,.result-row.selected,.result-row.error{background:#0b0b0b}.result-row.selected{box-shadow:inset 2px 0 #fff}.batch-progress{background:#222}.batch-progress>div{background:#fff}input[type=checkbox]{accent-color:#fff}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div><h1><span class="sa3">SA3</span> Graphical Pipeline Monitor</h1><div class="subtitle">One browser protocol, MLX or remote CUDA inference.</div></div>
+  <div class="topmeta"><a class="pill" href="/">Home</a><a class="pill" href="/sfx-matrix">SFX Matrix</a><a class="pill" href="/same-lab">SAME Lab</a><a class="pill" href="/drift">Drift Looper</a><a class="pill" href="/loop-mutator">Loop Mutator</a><div class="pill">Backend <b id="backendName">loading…</b></div><div class="pill">Device <b id="deviceName">—</b></div><div class="pill">VRAM <b id="vramTotal">—</b></div><div class="pill">Dtype <b id="activeDtype">—</b></div></div>
+</header>
+<div class="layout">
+  <aside class="card controls">
+    <div class="section-title"><span class="badge">1</span> Input + controls</div>
+    <div class="field"><label>Mode</label><select id="mode"><option value="text">Text → audio</option><option value="audio">Audio → audio</option><option value="inpaint">Inpaint</option></select></div>
+    <div class="drop" id="drop"><div class="big">⇧</div><div id="dropText">Drop an audio file here</div><small>Needed for audio-to-audio / inpainting</small><button type="button" id="browse">Choose file</button><input id="audioFile" type="file" accept="audio/*,.wav,.aiff,.aif,.flac,.mp3,.m4a" hidden></div>
+    <canvas id="inputWave" class="input-wave"></canvas>
+    <div class="field"><label>Prompt</label><textarea id="prompt" placeholder="e.g. warm ambient synth texture with soft pulses"></textarea></div>
+    <div class="field"><label>Negative prompt</label><input id="negative" placeholder="optional — used when CFG ≠ 1" /></div>
+    <div class="row">
+      <div class="field"><label>DiT</label><select id="dit"><option>sm-music</option><option>sm-sfx</option><option>medium</option></select></div>
+      <div class="field"><label>SAME codec</label><select id="decoder"><option value="auto">auto</option><option>same-s</option><option>same-l</option></select></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label>Seconds</label><input id="seconds" type="number" value="10" min="0.1" max="380" step="0.1"></div>
+      <div class="field"><label>Steps</label><input id="steps" type="number" value="8" min="1" max="64"></div>
+      <div class="field"><label>Seed</label><input id="seed" placeholder="random"></div>
+    </div>
+    <div class="row3">
+      <div class="field"><label>CFG</label><input id="cfg" type="number" value="1" step="0.1"></div>
+      <div class="field"><label>APG</label><input id="apg" type="number" value="1" min="0" max="1" step="0.05"></div>
+      <div class="field"><label>σ max</label><input id="sigma" type="number" value="1" min="0.01" step="0.05"></div>
+    </div>
+    <div id="inpaintFields" class="row" hidden>
+      <div class="field"><label>Inpaint start (s)</label><input id="inpaintStart" type="number" value="2" min="0" step="0.1"></div>
+      <div class="field"><label>Inpaint end (s)</label><input id="inpaintEnd" type="number" value="5" min="0" step="0.1"></div>
+    </div>
+    <div class="actions"><button id="generate" class="primary">Generate + monitor</button><button id="clear" class="secondary" type="button">Clear</button></div>
+    <div class="help">Only small diagnostic previews cross the network. Full tensors, models and generated files stay on the inference host.</div>
+
+    <details class="batch-config" id="batchDetails">
+      <summary>Batch processing / parameter sweeps</summary>
+      <div class="field"><label>Batch type</label><select id="batchType"><option value="sigma">σ max sweep</option><option value="cfg">CFG sweep</option><option value="grid">σ max × CFG grid</option><option value="seed">Seed sweep</option><option value="custom">Custom rows</option></select></div>
+      <div class="batch-values" id="batchSweepFields">
+        <div class="field" id="sigmaValuesField"><label>σ max values</label><input id="batchSigmaValues" value="0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 1.00"></div>
+        <div class="field" id="cfgValuesField" hidden><label>CFG values</label><input id="batchCfgValues" value="1, 1.5, 2, 3, 4"></div>
+        <div class="field" id="seedCountField" hidden><label>Number of seeds</label><input id="batchSeedCount" type="number" min="1" max="64" value="8"></div>
+        <div class="field" id="customRowsField" hidden><label>Custom rows: σ,cfg,apg,seed</label><textarea id="batchCustomRows">0.20,1,1,1234
+0.30,1,1,1234
+0.40,2,1,1234</textarea><div class="custom-help">One render per line. Leave a column blank to use the main control value.</div></div>
+      </div>
+      <div class="help">Sweeps hold the input, prompt and (except Seed sweep) seed constant so differences are attributable to the parameter being tested.</div>
+      <div class="batch-actions"><button id="startBatch" class="go" type="button">Start batch</button><button id="stopBatch" type="button" disabled>Stop after current</button></div>
+      <div class="batch-progress"><div id="batchProgressBar"></div></div><div id="batchStatus" class="help">No batch running.</div>
+    </details>
+  </aside>
+
+  <main class="main">
+    <div class="pipeline" id="pipeline">
+      <div class="stage" data-stage="t5"><div class="n">01</div><h3>T5Gemma</h3><div class="status">prompt → 768-D tokens</div><div class="shape"></div><div class="ms"></div></div>
+      <div class="stage" data-stage="conditioning"><div class="n">02</div><h3>Conditioning</h3><div class="status">padding + duration + CFG</div><div class="shape"></div><div class="ms"></div></div>
+      <div class="stage" data-stage="encoder"><div class="n">03</div><h3>SAME Encode</h3><div class="status">only for input audio</div><div class="shape"></div><div class="ms"></div></div>
+      <div class="stage" data-stage="dit"><div class="n">04</div><h3>DiT Sampler</h3><div class="status">ping-pong rectified flow</div><div class="shape"></div><div class="ms"></div></div>
+      <div class="stage" data-stage="decoder"><div class="n">05</div><h3>SAME Decode</h3><div class="status">256-D latent → patches</div><div class="shape"></div><div class="ms"></div></div>
+      <div class="stage" data-stage="output"><div class="n">06</div><h3>Output</h3><div class="status">unpatch → WAV</div><div class="shape"></div><div class="ms"></div></div>
+    </div>
+
+    <div class="monitor-grid">
+      <section class="card monitor-card">
+        <h2>DiT latent monitor</h2>
+        <div class="canvas-wrap"><canvas id="latentCanvas" width="768" height="360"></canvas><div class="canvas-label" id="latentLabel">waiting for sampler</div></div>
+        <div class="stats">
+          <div class="stat"><span>shape</span><b id="stShape">—</b></div><div class="stat"><span>mean</span><b id="stMean">—</b></div><div class="stat"><span>std</span><b id="stStd">—</b></div><div class="stat"><span>RMS</span><b id="stRms">—</b></div><div class="stat"><span>min</span><b id="stMin">—</b></div><div class="stat"><span>max</span><b id="stMax">—</b></div>
+        </div>
+      </section>
+      <section class="card monitor-card">
+        <h2>Denoising metrics</h2>
+        <canvas class="chart" id="metricCanvas" width="700" height="280"></canvas>
+        <h2 style="margin-top:10px">Text embedding</h2>
+        <div class="canvas-wrap"><canvas class="embedding" id="embeddingCanvas" width="700" height="220"></canvas><div class="canvas-label" id="embeddingLabel">T5 output</div></div>
+      </section>
+    </div>
+
+    <div class="lower">
+      <section class="card wave-card"><h2 style="font-size:14px;margin:0 0 9px">Input audio</h2><canvas id="inputServerWave" width="800" height="150"></canvas><div id="inputMeta" class="help">No input encoded yet.</div></section>
+      <section class="card wave-card"><h2 style="font-size:14px;margin:0 0 9px">Generated audio</h2><canvas id="outputWave" width="800" height="150"></canvas><div class="audio-row"><audio id="player" controls loop></audio><a id="download" class="download" hidden>WAV</a></div><div id="outputMeta" class="help">No output yet.</div></section>
+    </div>
+
+
+    <section class="card results-card" id="resultsCard">
+      <div class="results-head"><div><h2>Batch results / audition playlist</h2><div id="resultsSummary" class="batch-status">No results yet.</div></div><div class="results-tools"><button id="clearResults" type="button">Clear list</button><a id="downloadAll" href="#" hidden>Download all ZIP</a></div></div>
+      <div class="result-layout">
+        <div id="resultList" class="result-list"><div class="help" style="padding:12px">Batch outputs will appear here as they are generated.</div></div>
+        <div class="audition">
+          <h3 id="auditionTitle">Select a result to audition</h3>
+          <canvas id="batchAuditionWave" width="800" height="150"></canvas>
+          <audio id="batchPlayer" controls loop></audio>
+          <div class="audio-row"><label style="font-size:11px;color:#91a2ba"><input id="batchLoop" type="checkbox" checked> loop</label><a id="batchDownload" class="download" hidden>WAV</a></div>
+          <div id="auditionMeta" class="audition-meta">—</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="errorPanel" class="error-panel">
+      <h2>Backend error</h2>
+      <div id="errorMessage" class="error-message"></div>
+      <pre id="errorTrace" class="error-trace"></pre>
+      <a id="debugLink" class="debug-link" href="#" target="_blank">Open raw run diagnostics</a>
+    </section>
+    <details class="console" id="consoleDetails"><summary>Event / model log</summary><div id="log" class="log"></div></details>
+  </main>
+</div>
+<div class="statusbar">
+  <div class="status-cell"><span>Status</span><b><i id="liveDot" class="live-dot"></i><span id="status" style="display:inline;color:inherit">idle</span></b></div>
+  <div class="status-cell"><span>Current stage</span><b id="currentStage">—</b></div>
+  <div class="status-cell"><span>Sampler</span><b id="stepStatus">—</b></div>
+  <div class="status-cell"><span>Peak accelerator memory</span><b id="memory">—</b></div>
+  <div class="status-cell"><span>Elapsed</span><b id="elapsed">—</b></div>
+  <div class="status-cell"><span>Run</span><b id="runId">—</b></div>
+</div>
+</div>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let audioFile=null,eventSource=null,runStarted=0,timer=null,peakMemory=0,appInfo=null;
+let metrics=[];
+let batchResults=[], batchRunning=false, batchStopRequested=false, selectedBatchIndex=-1;
+const stageNames={t5:'T5Gemma',conditioning:'Conditioning',encoder:'SAME Encode',dit:'DiT Sampler',decoder:'SAME Decode',output:'Output'};
+
+function fmt(x,n=4){return Number.isFinite(+x)?(+x).toFixed(n):'—'}
+function fmtMs(ms){return ms==null?'':(ms>=1000?(ms/1000).toFixed(2)+' s':Math.round(ms)+' ms')}
+function fmtBytes(n){if(!n)return '—';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i>1?2:0)+' '+u[i]}
+function log(msg){const el=$('#log');el.textContent+=msg+'\n';el.scrollTop=el.scrollHeight}
+function setOutputAudio(url,autoplay=true){if(!url)return;const p=$('#player');if(p.dataset.outputUrl===url)return;p.dataset.outputUrl=url;p.src=url;$('#download').href=url;$('#download').hidden=false;$('#download').download='sa3_output.wav';if(autoplay)p.play().catch(()=>{})}
+function resetStages(){$$('.stage').forEach(x=>{x.classList.remove('active','done','skipped','error');x.querySelector('.ms').textContent='';x.querySelector('.shape').textContent=''})}
+function stageUpdate(stage,state,ms,label){const el=document.querySelector(`.stage[data-stage="${stage}"]`);if(!el)return;el.classList.remove('active','done','skipped','error');if(state)el.classList.add(state);if(ms!=null)el.querySelector('.ms').textContent=fmtMs(ms);if(label&&state==='active')el.querySelector('.status').textContent=label;if(state==='active')$('#currentStage').textContent=stageNames[stage]||stage}
+function stageShape(stage,shape){const el=document.querySelector(`.stage[data-stage="${stage}"] .shape`);if(el)el.textContent=shape||''}
+
+function colorMap(v){v=Math.max(0,Math.min(255,v));let r,g,b;if(v<85){const t=v/85;r=18+35*t;g=13+31*t;b=48+115*t}else if(v<170){const t=(v-85)/85;r=53+104*t;g=44+41*t;b=163+77*t}else{const t=(v-170)/85;r=157+98*t;g=85+96*t;b=240-72*t}return [r|0,g|0,b|0,255]}
+function drawHeatmap(canvas,hm){if(!hm||!hm.data)return;const off=document.createElement('canvas');off.width=hm.w;off.height=hm.h;const c=off.getContext('2d');const im=c.createImageData(hm.w,hm.h);for(let i=0;i<hm.data.length;i++){const col=colorMap(hm.data[i]);im.data.set(col,i*4)}c.putImageData(im,0,0);const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(off,0,0,canvas.width,canvas.height)}
+function updateStats(s){if(!s)return;$('#stShape').textContent=(s.shape||[]).join('×');$('#stMean').textContent=fmt(s.mean);$('#stStd').textContent=fmt(s.std);$('#stRms').textContent=fmt(s.rms);$('#stMin').textContent=fmt(s.min);$('#stMax').textContent=fmt(s.max)}
+function drawMetrics(){const c=$('#metricCanvas'),ctx=c.getContext('2d'),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#060910';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#1b2b41';ctx.lineWidth=1;for(let i=1;i<5;i++){let y=i*h/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}if(!metrics.length){ctx.fillStyle='#6f8099';ctx.font='16px system-ui';ctx.fillText('Sampler metrics appear here',18,28);return}const maxR=Math.max(...metrics.map(m=>Math.max(m.rms,m.std)),1e-4);const line=(key,stroke,scale=maxR)=>{ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.beginPath();metrics.forEach((m,i)=>{const x=metrics.length===1?w/2:i/(metrics.length-1)*(w-36)+18;const y=h-18-(Math.max(0,m[key])/scale)*(h-36);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke()};line('rms','#48e1d2');line('std','#aa73ff');const maxSigma=Math.max(...metrics.map(m=>m.sigma),1);line('sigma','#ffb154',maxSigma);ctx.fillStyle='#8ea0b8';ctx.font='12px ui-monospace';ctx.fillText('RMS',18,16);ctx.fillStyle='#aa73ff';ctx.fillText('STD',62,16);ctx.fillStyle='#ffb154';ctx.fillText('SIGMA',102,16)}
+function drawWave(canvas,wave){const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.fillStyle='#060910';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#1c2a3d';ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();if(!wave||!wave.points||!wave.points.length)return;const channels=wave.points;channels.forEach((pts,ch)=>{ctx.strokeStyle=ch===0?'#38dcca':'#7f82ff';ctx.lineWidth=1;ctx.beginPath();pts.forEach((p,i)=>{const x=i/Math.max(1,pts.length-1)*w;const y1=(1-(p[1]+1)/2)*h;const y2=(1-(p[0]+1)/2)*h;ctx.moveTo(x,y1);ctx.lineTo(x,y2)});ctx.stroke()})}
+async function browserWave(file){try{const buf=await file.arrayBuffer(),ac=new (window.AudioContext||window.webkitAudioContext)(),ab=await ac.decodeAudioData(buf.slice(0)),n=900,pts=[];for(let ch=0;ch<Math.min(2,ab.numberOfChannels);ch++){const a=ab.getChannelData(ch),step=Math.max(1,Math.floor(a.length/n)),arr=[];for(let i=0;i<a.length;i+=step){let mn=1,mx=-1;for(let j=i;j<Math.min(i+step,a.length);j++){mn=Math.min(mn,a[j]);mx=Math.max(mx,a[j])}arr.push([mn,mx])}pts.push(arr)}drawWave($('#inputWave'),{points:pts});await ac.close()}catch(e){log('Browser preview: '+e.message)}}
+function resetMonitors(){metrics=[];drawMetrics();$('#errorPanel').classList.remove('show');$('#errorMessage').textContent='';$('#errorTrace').textContent='';['latentCanvas','embeddingCanvas','inputServerWave','outputWave'].forEach(id=>{const c=$('#'+id),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);x.fillStyle='#060910';x.fillRect(0,0,c.width,c.height)});updateStats({});$('#latentLabel').textContent='waiting for sampler';$('#embeddingLabel').textContent='T5 output';$('#player').removeAttribute('src');delete $('#player').dataset.outputUrl;$('#download').hidden=true;$('#outputMeta').textContent='No output yet.';$('#inputMeta').textContent='No input encoded yet.';peakMemory=0;$('#memory').textContent='—';$('#stepStatus').textContent='—';$('#currentStage').textContent='—'}
+function setFile(file){audioFile=file||null;const d=$('#drop');if(file){d.classList.add('has');$('#dropText').textContent=file.name+'  ·  '+(file.size/1048576).toFixed(2)+' MB';browserWave(file)}else{d.classList.remove('has');$('#dropText').textContent='Drop an audio file here';drawWave($('#inputWave'),null)}}
+$('#browse').onclick=()=>$('#audioFile').click();$('#audioFile').onchange=e=>setFile(e.target.files[0]);
+const drop=$('#drop');['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0])});
+$('#mode').onchange=()=>{$('#inpaintFields').hidden=$('#mode').value!=='inpaint'};
+$('#clear').onclick=()=>{setFile(null);$('#prompt').value='';$('#negative').value='';resetStages();resetMonitors();$('#status').textContent='idle';$('#liveDot').classList.remove('on')};
+
+function handleEvent(e){if(e.memory_bytes){peakMemory=Math.max(peakMemory,e.memory_bytes);$('#memory').textContent=fmtBytes(peakMemory)}
+ switch(e.type){
+  case 'status': $('#status').textContent=e.status; if(e.status==='running'){$('#liveDot').classList.add('on')} if(['complete','error'].includes(e.status)){$('#liveDot').classList.remove('on');$('#generate').disabled=batchRunning;clearInterval(timer);eventSource?.close();eventSource=null} if(e.output_url)setOutputAudio(e.output_url,true); break;
+  case 'stage': stageUpdate(e.stage,e.state,e.ms,e.label); break;
+  case 'run_start': $('#runId').textContent=e.run_id; log(`run ${e.run_id}: ${e.mode}, ${e.dit}/${e.decoder}, ${e.seconds}s, ${e.steps} steps, seed ${e.seed}`); stageShape('dit',`1×${e.latent_channels}×${e.t_lat}`); break;
+  case 'model_load': log(`${e.model}: ${e.cached?'cached':fmtMs(e.ms)}`); break;
+  case 'embedding': if(e.role==='prompt'){drawHeatmap($('#embeddingCanvas'),e.heatmap);$('#embeddingLabel').textContent=`prompt embedding · ${e.tokens} tokens · ${(e.stats.shape||[]).join('×')}`;stageShape('t5',(e.stats.shape||[]).join('×'))} else log(`negative embedding: ${e.tokens} tokens`); break;
+  case 'conditioning': stageShape('conditioning',`cross ${(e.cross_attn.shape||[]).join('×')}`); break;
+  case 'input_audio': drawWave($('#inputServerWave'),e.waveform);$('#inputMeta').textContent=`${(e.stats.shape||[]).join('×')} · RMS ${fmt(e.stats.rms)} · peak ${fmt(Math.max(Math.abs(e.stats.min),Math.abs(e.stats.max)))}`; break;
+  case 'audio_latent': drawHeatmap($('#latentCanvas'),e.heatmap);updateStats(e.stats);$('#latentLabel').textContent='SAME input latent';stageShape('encoder',(e.stats.shape||[]).join('×')); break;
+  case 'sampler_init': drawHeatmap($('#latentCanvas'),e.heatmap);updateStats(e.stats);$('#latentLabel').textContent=`initial latent · σ ${fmt(e.sigma,3)}`;metrics=[];drawMetrics(); break;
+  case 'sampler_step': drawHeatmap($('#latentCanvas'),e.heatmap);updateStats(e.stats);$('#latentLabel').textContent=`DiT latent · step ${e.step}/${e.total} · σ ${fmt(e.sigma,4)}`;$('#stepStatus').textContent=`${e.step}/${e.total} · ${fmtMs(e.ms)}`;metrics.push({step:e.step,rms:e.stats.rms,std:e.stats.std,sigma:e.sigma,mean:e.stats.mean});drawMetrics(); break;
+  case 'paste_back': drawHeatmap($('#latentCanvas'),e.heatmap);updateStats(e.stats);$('#latentLabel').textContent='final latent after inpaint paste-back'; break;
+  case 'latent_final': stageShape('dit',(e.stats.shape||[]).join('×')); break;
+  case 'decoder_patches': stageShape('decoder',(e.stats.shape||[]).join('×')+' · '+e.mode); break;
+  case 'output_audio': drawWave($('#outputWave'),e.waveform);$('#outputMeta').textContent=`${((e.sample_rate||44100)/1000).toFixed(1)} kHz stereo · RMS ${fmt(e.stats.rms)} · peak ${fmt(Math.max(Math.abs(e.stats.min),Math.abs(e.stats.max)))}`;stageShape('output',(e.stats.shape||[]).join('×')); break;
+  case 'run_complete': log(`complete: ${(e.timing.total_ms/1000).toFixed(2)} s wall · ${e.timing.realtime.toFixed(2)}× realtime · seed ${e.seed}`); break;
+  case 'audio_ready': setOutputAudio(e.output_url,false); break;
+  case 'tensor_preview': case 'metrics': break;
+  case 'log': log(e.message); break;
+  case 'error': {
+    $('#status').textContent='error';$('#status').classList.add('err');$('#liveDot').classList.remove('on');$('#generate').disabled=batchRunning;clearInterval(timer);
+    $$('.stage.active').forEach(x=>{x.classList.remove('active');x.classList.add('error')});
+    $('#errorPanel').classList.add('show');$('#errorMessage').textContent=e.message||'Unknown backend error';$('#errorTrace').textContent=e.traceback||e.message||'';
+    const rid=e.run_id||$('#runId').textContent;$('#debugLink').href='/api/debug/'+encodeURIComponent(rid);
+    $('#consoleDetails').open=true;log('ERROR: '+(e.message||'unknown'));log(e.traceback||'no traceback received');
+    $('#errorPanel').scrollIntoView({behavior:'smooth',block:'nearest'});
+    break;
+  }
+ }
+}
+
+$('#generate').onclick=async()=>{const mode=$('#mode').value;if((mode==='audio'||mode==='inpaint')&&!audioFile){alert('Choose an input audio file for this mode.');return}resetStages();resetMonitors();$('#status').classList.remove('err');$('#generate').disabled=true;$('#status').textContent='uploading';$('#liveDot').classList.add('on');const fd=new FormData();[['prompt',$('#prompt').value],['negative_prompt',$('#negative').value],['mode',mode],['dit',$('#dit').value],['decoder',$('#decoder').value],['seconds',$('#seconds').value],['steps',$('#steps').value],['seed',$('#seed').value],['cfg',$('#cfg').value],['apg',$('#apg').value],['sigma_max',$('#sigma').value],['inpaint_start',$('#inpaintStart').value],['inpaint_end',$('#inpaintEnd').value]].forEach(([k,v])=>fd.append(k,v));if(audioFile)fd.append('audio',audioFile,audioFile.name);try{const r=await fetch('/api/generate',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||r.statusText);const j=await r.json();$('#runId').textContent=j.run_id;runStarted=performance.now();clearInterval(timer);timer=setInterval(()=>$('#elapsed').textContent=((performance.now()-runStarted)/1000).toFixed(1)+' s',100);eventSource?.close();eventSource=new EventSource(j.events_url);eventSource.onmessage=ev=>handleEvent(JSON.parse(ev.data));eventSource.onerror=()=>{if($('#status').textContent!=='complete'&&$('#status').textContent!=='error')log('event stream disconnected')};}catch(e){$('#generate').disabled=false;$('#liveDot').classList.remove('on');$('#status').textContent='error';alert(e.message)}};
+
+
+function parseNumberList(text){return text.split(/[\s,;]+/).map(x=>x.trim()).filter(Boolean).map(Number).filter(Number.isFinite)}
+function batchTypeUI(){const t=$('#batchType').value;$('#sigmaValuesField').hidden=!(t==='sigma'||t==='grid');$('#cfgValuesField').hidden=!(t==='cfg'||t==='grid');$('#seedCountField').hidden=t!=='seed';$('#customRowsField').hidden=t!=='custom'}
+$('#batchType').onchange=batchTypeUI;batchTypeUI();
+
+function currentBaseConfig(){return {prompt:$('#prompt').value,negative_prompt:$('#negative').value,mode:$('#mode').value,dit:$('#dit').value,decoder:$('#decoder').value,seconds:$('#seconds').value,steps:$('#steps').value,seed:$('#seed').value,cfg:$('#cfg').value,apg:$('#apg').value,sigma_max:$('#sigma').value,inpaint_start:$('#inpaintStart').value,inpaint_end:$('#inpaintEnd').value}}
+function makeBatchConfigs(){
+  const base=currentBaseConfig(), type=$('#batchType').value; let out=[];
+  let fixedSeed=parseInt(base.seed,10); if(!Number.isFinite(fixedSeed)){fixedSeed=Math.floor(Math.random()*2000000000);base.seed=String(fixedSeed);$('#seed').value=base.seed}
+  if(type==='sigma'){const vals=parseNumberList($('#batchSigmaValues').value);out=vals.map(v=>({...base,sigma_max:String(v),seed:String(fixedSeed)}))}
+  else if(type==='cfg'){const vals=parseNumberList($('#batchCfgValues').value);out=vals.map(v=>({...base,cfg:String(v),seed:String(fixedSeed)}))}
+  else if(type==='grid'){const sv=parseNumberList($('#batchSigmaValues').value),cv=parseNumberList($('#batchCfgValues').value);for(const s of sv)for(const c of cv)out.push({...base,sigma_max:String(s),cfg:String(c),seed:String(fixedSeed)})}
+  else if(type==='seed'){const n=Math.max(1,Math.min(64,parseInt($('#batchSeedCount').value,10)||8));for(let i=0;i<n;i++)out.push({...base,seed:String(fixedSeed+i)})}
+  else {const lines=$('#batchCustomRows').value.split(/\n+/).map(x=>x.trim()).filter(Boolean);for(const line of lines){const p=line.split(',').map(x=>x.trim());const c={...base};if(p[0])c.sigma_max=p[0];if(p[1])c.cfg=p[1];if(p[2])c.apg=p[2];if(p[3])c.seed=p[3];out.push(c)}}
+  return out;
+}
+function resultParamText(r){const c=r.config;return `σ ${Number(c.sigma_max).toFixed(3)} · CFG ${c.cfg} · APG ${c.apg} · seed ${c.seed||'random'}`}
+function renderResults(){
+ const el=$('#resultList'); if(!batchResults.length){el.innerHTML='<div class="help" style="padding:12px">Batch outputs will appear here as they are generated.</div>';$('#resultsSummary').textContent='No results yet.';$('#downloadAll').hidden=true;return}
+ el.innerHTML=batchResults.map((r,i)=>`<div class="result-row ${i===selectedBatchIndex?'selected':''} ${r.status==='error'?'error':''}" data-ri="${i}"><span class="idx">${String(i+1).padStart(2,'0')}</span><span class="state ${r.status}">${r.status}</span><span class="result-param" title="${resultParamText(r)}">${resultParamText(r)}</span><span>${Number(r.config.seconds).toFixed(1)}s</span><span>${r.config.steps} step</span><button class="mini-btn play-result" data-ri="${i}" ${r.status!=='complete'?'disabled':''}>▶ Play</button><a class="mini-btn" style="text-decoration:none;text-align:center" ${r.outputUrl?`href="${r.outputUrl}" download`:'aria-disabled="true"'}>WAV</a></div>`).join('');
+ el.querySelectorAll('.result-row').forEach(x=>x.addEventListener('click',ev=>{if(ev.target.closest('a')||ev.target.closest('button'))return;selectBatchResult(+x.dataset.ri,false)}));
+ el.querySelectorAll('.play-result').forEach(b=>b.onclick=e=>{e.stopPropagation();selectBatchResult(+b.dataset.ri,true)});
+ const done=batchResults.filter(x=>x.status==='complete').length,err=batchResults.filter(x=>x.status==='error').length;$('#resultsSummary').textContent=`${done} complete · ${err} error · ${batchResults.length} total`;
+ const ids=batchResults.filter(x=>x.status==='complete'&&x.runId).map(x=>x.runId);if(ids.length){$('#downloadAll').hidden=false;$('#downloadAll').href='/api/archive?run_ids='+encodeURIComponent(ids.join(','))}else $('#downloadAll').hidden=true;
+}
+async function previewAudioUrl(url){try{const ab=await (await fetch(url)).arrayBuffer(),ac=new (window.AudioContext||window.webkitAudioContext)(),buf=await ac.decodeAudioData(ab),n=900,pts=[];for(let ch=0;ch<Math.min(2,buf.numberOfChannels);ch++){const a=buf.getChannelData(ch),step=Math.max(1,Math.floor(a.length/n)),arr=[];for(let i=0;i<a.length;i+=step){let mn=1,mx=-1;for(let j=i;j<Math.min(i+step,a.length);j++){mn=Math.min(mn,a[j]);mx=Math.max(mx,a[j])}arr.push([mn,mx])}pts.push(arr)}drawWave($('#batchAuditionWave'),{points:pts});await ac.close()}catch(e){log('Audition preview: '+e.message)}}
+function selectBatchResult(i,autoplay=true){const r=batchResults[i];if(!r||r.status!=='complete')return;selectedBatchIndex=i;renderResults();$('#auditionTitle').textContent=`Result ${i+1} · ${resultParamText(r)}`;$('#auditionMeta').textContent=`run ${r.runId}\n${resultParamText(r)}\n${r.config.dit} / ${r.config.decoder} · ${r.config.seconds}s · ${r.config.steps} steps`;$('#batchPlayer').src=r.outputUrl+'?t='+Date.now();$('#batchPlayer').loop=$('#batchLoop').checked;$('#batchDownload').href=r.outputUrl;$('#batchDownload').download=`sa3_result_${String(i+1).padStart(3,'0')}.wav`;$('#batchDownload').hidden=false;previewAudioUrl(r.outputUrl);if(autoplay)$('#batchPlayer').play().catch(()=>{})}
+$('#batchLoop').onchange=()=>$('#batchPlayer').loop=$('#batchLoop').checked;
+$('#clearResults').onclick=()=>{if(batchRunning)return;batchResults=[];selectedBatchIndex=-1;renderResults();$('#batchPlayer').removeAttribute('src');$('#batchDownload').hidden=true;drawWave($('#batchAuditionWave'),null);$('#auditionTitle').textContent='Select a result to audition';$('#auditionMeta').textContent='—'};
+$('#stopBatch').onclick=()=>{batchStopRequested=true;$('#batchStatus').textContent='Stopping after current render…';$('#stopBatch').disabled=true};
+function postBatchRun(config){return new Promise(async(resolve,reject)=>{const mode=config.mode;if((mode==='audio'||mode==='inpaint')&&!audioFile){reject(new Error('Choose an input audio file for this batch mode.'));return}const fd=new FormData();Object.entries(config).forEach(([k,v])=>fd.append(k,v));if(audioFile)fd.append('audio',audioFile,audioFile.name);try{const r=await fetch('/api/generate',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).detail||r.statusText);const j=await r.json();$('#runId').textContent=j.run_id;runStarted=performance.now();clearInterval(timer);timer=setInterval(()=>$('#elapsed').textContent=((performance.now()-runStarted)/1000).toFixed(1)+' s',100);const es=new EventSource(j.events_url);let outputUrl=null;es.onmessage=ev=>{const e=JSON.parse(ev.data);handleEvent(e);if(e.type==='status'&&e.output_url)outputUrl=e.output_url;if(e.type==='status'&&e.status==='complete'){es.close();resolve({runId:j.run_id,outputUrl:outputUrl||`/api/output/${j.run_id}/generated.wav`})}if(e.type==='error'){es.close();reject(Object.assign(new Error(e.message||'generation failed'),{runId:j.run_id}))}};es.onerror=()=>log('batch event stream disconnected for '+j.run_id)}catch(e){reject(e)}})}
+$('#startBatch').onclick=async()=>{if(batchRunning)return;const configs=makeBatchConfigs();if(!configs.length){alert('No valid batch values.');return}if(configs.length>128&&!confirm(`This batch contains ${configs.length} renders. Continue?`))return;batchRunning=true;batchStopRequested=false;$('#startBatch').disabled=true;$('#stopBatch').disabled=false;$('#generate').disabled=true;batchResults=configs.map(c=>({config:c,status:'queued',runId:null,outputUrl:null,error:null}));selectedBatchIndex=-1;renderResults();$('#status').classList.remove('err');
+ for(let i=0;i<batchResults.length;i++){if(batchStopRequested)break;const item=batchResults[i];item.status='running';renderResults();$('#batchStatus').textContent=`Running ${i+1}/${batchResults.length} · ${resultParamText(item)}`;$('#batchProgressBar').style.width=(i/batchResults.length*100)+'%';resetStages();resetMonitors();$('#status').textContent='batch running';$('#liveDot').classList.add('on');try{const got=await postBatchRun(item.config);item.status='complete';item.runId=got.runId;item.outputUrl=got.outputUrl;if(selectedBatchIndex<0)selectBatchResult(i,false)}catch(e){item.status='error';item.runId=e.runId||item.runId;item.error=e.message;log('Batch item error: '+e.message)}renderResults();$('#batchProgressBar').style.width=((i+1)/batchResults.length*100)+'%'}
+ const completed=batchResults.filter(x=>x.status==='complete').length;$('#batchStatus').textContent=batchStopRequested?`Stopped · ${completed}/${batchResults.length} complete`:`Batch complete · ${completed}/${batchResults.length} rendered`;batchRunning=false;$('#startBatch').disabled=false;$('#stopBatch').disabled=true;$('#generate').disabled=false;$('#liveDot').classList.remove('on');$('#status').textContent=batchStopRequested?'batch stopped':'batch complete';renderResults()};
+async function loadInfo(){
+ try{
+  const r=await fetch('/api/info');if(!r.ok)throw new Error((await r.json()).detail||r.statusText);appInfo=await r.json();const b=appInfo.backend||{};
+  $('#backendName').textContent=(b.backend||'unknown').toUpperCase();$('#deviceName').textContent=b.device_name||b.device||'—';$('#deviceName').title=[b.device,b.framework,b.framework_version].filter(Boolean).join(' · ');$('#vramTotal').textContent=b.vram_total_bytes?fmtBytes(b.vram_total_bytes):'shared';$('#activeDtype').textContent=b.dtype||'—';
+  const setOptions=(el,items,preferred)=>{el.innerHTML='';items.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o)});if(items.includes(preferred))el.value=preferred};
+  setOptions($('#dit'),appInfo.dit_choices,appInfo.defaults.dit);setOptions($('#decoder'),appInfo.decoder_choices,appInfo.defaults.decoder);
+  $('#seconds').max=appInfo.max_seconds||380;log(`backend ${b.backend}: ${b.device_name} · ${b.dtype} · ${b.framework_version||b.framework}`);
+ }catch(e){$('#backendName').textContent='ERROR';$('#deviceName').textContent=e.message;$('#generate').disabled=true;log('Startup diagnostics failed: '+e.message)}
+}
+renderResults();drawWave($('#batchAuditionWave'),null);
+
+resetMonitors();drawWave($('#inputWave'),null);drawMetrics();loadInfo();
+</script>
+</body>
+</html>

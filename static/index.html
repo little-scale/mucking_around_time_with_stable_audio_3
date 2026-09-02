@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>SA3 Tools</title>
+  <style>
+    :root{color-scheme:dark;--bg:#000;--fg:#fff;--muted:#999;--line:#353535}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(1100px,calc(100% - 40px));margin:0 auto;padding:68px 0 48px}
+    header{display:grid;grid-template-columns:1fr auto;gap:28px;align-items:end;padding-bottom:34px;border-bottom:1px solid var(--fg)}
+    .eyebrow,.number,.meta,.status{font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em;text-transform:uppercase}
+    .eyebrow{color:var(--muted);margin:0 0 12px}
+    h1{font-size:clamp(42px,8vw,86px);font-weight:500;line-height:.92;letter-spacing:-.055em;margin:0}
+    .intro{max-width:500px;color:#ccc;margin:18px 0 0}
+    .status{border:1px solid var(--line);padding:13px 15px;min-width:250px;color:var(--muted)}
+    .status strong{display:block;color:var(--fg);font-weight:500;margin-bottom:5px;letter-spacing:.04em}
+    .grid{display:grid;grid-template-columns:1fr 1fr;margin-top:44px;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+    .card{min-height:250px;padding:26px;display:flex;flex-direction:column;color:var(--fg);text-decoration:none;border-right:1px solid var(--line);border-bottom:1px solid var(--line);transition:background .15s,color .15s}
+    .card:hover,.card:focus-visible{background:var(--fg);color:var(--bg);outline:0}
+    .number{color:var(--muted)}
+    .card:hover .number,.card:focus-visible .number{color:#555}
+    h2{font-size:30px;font-weight:500;letter-spacing:-.035em;margin:31px 0 10px}
+    .card p{max-width:390px;margin:0;color:#aaa}
+    .card:hover p,.card:focus-visible p{color:#333}
+    .open{margin-top:auto;padding-top:24px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em}
+    footer{display:flex;justify-content:space-between;gap:20px;color:var(--muted);border-top:1px solid var(--fg);margin-top:44px;padding-top:18px}
+    @media(max-width:720px){main{width:min(100% - 24px,1100px);padding-top:34px}header{grid-template-columns:1fr}.status{min-width:0}.grid{grid-template-columns:1fr}.card{min-height:220px}footer{display:block}footer span{display:block;margin-bottom:7px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <p class="eyebrow">Stable Audio 3 · local inference tools</p>
+      <h1>SA3 Tools</h1>
+      <p class="intro">Five browser interfaces sharing one MLX or CUDA backend. Models, uploaded source audio and generated files remain on this host.</p>
+    </div>
+    <div class="status" id="status"><strong>Checking backend…</strong><span>Connecting to /api/info</span></div>
+  </header>
+
+  <section class="grid" aria-label="SA3 interfaces">
+    <a class="card" href="/monitor">
+      <span class="number">01</span>
+      <h2>Graphical Pipeline Monitor</h2>
+      <p>Generate or transform audio while inspecting model stages, tensor previews, sampler steps and metrics. Includes parameter sweeps, playlists and downloads.</p>
+      <span class="open">Open Graphical Pipeline Monitor →</span>
+    </a>
+    <a class="card" href="/same-lab">
+      <span class="number">02</span>
+      <h2>SAME Lab</h2>
+      <p>Encode audio into SAME latents, edit channels over time, apply profiles and LFOs, mix two sources, audition results and experiment with OSC.</p>
+      <span class="open">Open latent lab →</span>
+    </a>
+    <a class="card" href="/sfx-matrix">
+      <span class="number">03</span>
+      <h2>SFX Matrix</h2>
+      <p>Combine a general prompt with every row × column variation, optionally condition on audio, then audition, select and download generated results.</p>
+      <span class="open">Open matrix →</span>
+    </a>
+    <a class="card" href="/drift">
+      <span class="number">04</span>
+      <h2>Drift Looper</h2>
+      <p>A continuously evolving three-track instrument with independent melodic, percussion and texture lineages, synchronized playback and a live browser mixer.</p>
+      <span class="open">Open Drift Looper →</span>
+    </a>
+    <a class="card" href="/loop-mutator">
+      <span class="number">05</span>
+      <h2>Loop Mutator</h2>
+      <p>A focused single-loop instrument with loop-count mutation timing, audio import, waveform and live frequency-domain views.</p>
+      <span class="open">Open Loop Mutator →</span>
+    </a>
+  </section>
+
+  <footer class="meta"><span>Trusted LAN only · no authentication</span><span>MLX / PyTorch CUDA</span></footer>
+</main>
+<script>
+  const status=document.getElementById('status');
+  const bytes=value=>value?`${(value/2**30).toFixed(1)} GB VRAM`:'Unified memory';
+  fetch('/api/info').then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.detail||response.statusText);const info=data.backend;status.innerHTML=`<strong>${info.backend.toUpperCase()} · ${info.device_name}</strong><span>${bytes(info.vram_total_bytes)} · ${info.dtype}</span>`}).catch(error=>{status.innerHTML=`<strong>Backend unavailable</strong><span>${error.message}</span>`});
+</script>
+</body>
+</html>

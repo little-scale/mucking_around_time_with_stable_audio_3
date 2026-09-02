@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b0a">
+  <meta name="description" content="A three-track generative feedback instrument for Stable Audio 3 on MLX or CUDA.">
+  <title>Drift Looper — SA3 Multitrack</title>
+  <link rel="icon" href="/static/drift/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/drift/app.css?v=9">
+  <script src="/static/drift/app.js?v=9" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/drift" aria-label="Drift Looper home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>DRIFT LOOPER</strong><small>SA3 MULTITRACK</small></span>
+    </a>
+    <div class="top-actions">
+      <a href="/">HOME</a>
+      <a href="/monitor">GRAPHICAL PIPELINE MONITOR</a>
+      <a href="/sfx-matrix">SFX MATRIX</a>
+      <a href="/same-lab">SAME LAB</a>
+      <a href="/loop-mutator">LOOP MUTATOR</a>
+      <a href="/api/drift/docs" target="_blank" rel="noreferrer">API ↗</a>
+      <span class="backend-pill" id="backendBadge">BACKEND —</span>
+      <div class="status-pill" id="statusPill" data-phase="offline"><i></i><span id="statusLabel">CONNECTING</span></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="global-bar" aria-label="Global transport">
+      <button class="play-master" id="playButton" type="button" aria-label="Play all tracks" disabled><span id="playIcon">▶</span></button>
+      <div class="transport-copy">
+        <span class="mini-label">TRANSPORT</span>
+        <strong id="transportState">STOPPED</strong>
+        <small id="beatReadout">BAR 1 · BEAT 1</small>
+      </div>
+      <label class="bpm-control" for="bpmInput">
+        <span class="mini-label">GLOBAL BPM</span>
+        <div><input id="bpmInput" type="number" min="30" max="300" step="1" value="120"><small>BPM</small></div>
+      </label>
+      <label class="global-mutation-control" for="globalMutation">
+        <span class="mini-label">GLOBAL MUTATION</span>
+        <div><input id="globalMutation" type="range" min="0.01" max="1" step="0.01" value="0.14"><output id="globalMutationValue">0.14</output></div>
+      </label>
+      <label class="master-control" for="masterVolume">
+        <span class="mini-label">MASTER</span>
+        <input id="masterVolume" type="range" min="0" max="1.5" step="0.01" value="0.82">
+      </label>
+      <div class="master-meter" aria-label="Stereo master output level">
+        <div class="meter-heading"><span class="mini-label">OUTPUT</span><output id="masterMeterValue">−∞ dB</output></div>
+        <div class="meter-row"><small>L</small><i><b id="masterMeterLeft"></b></i></div>
+        <div class="meter-row"><small>R</small><i><b id="masterMeterRight"></b></i></div>
+      </div>
+      <div class="global-buttons">
+        <button type="button" class="button ghost" id="freezeAllButton">FREEZE ALL</button>
+        <button type="button" class="button acid" id="evolveButton">START EVOLUTION</button>
+      </div>
+    </section>
+
+    <section class="queue-strip" aria-live="polite">
+      <div><span class="queue-dot"></span><strong id="queueTitle">RENDER QUEUE IDLE</strong><small id="queueDetail">One safe accelerator job at a time</small></div>
+      <span id="tempoNote">120 BPM · QUANTIZED BUFFER SWAPS</span>
+    </section>
+
+    <section class="tracks" aria-label="Generative tracks">
+      <article class="track" data-track="melodic" style="--track:#d8ff58">
+        <div class="track-head">
+          <div class="track-number">01</div>
+          <div><p>SA3 SMALL MUSIC</p><h2>Melodic</h2><small>PITCHED / CHORDED / MELODIC</small></div>
+          <div class="track-state"><span class="phase">EMPTY</span><span class="generation">GEN —</span></div>
+          <button class="freeze-button" type="button">FREEZE</button>
+        </div>
+        <div class="track-body">
+          <section class="prompt-section">
+            <div class="section-line"><span>PROMPT TAGS</span><small class="sync-state">SAVED</small></div>
+            <div class="prompt-cloud" role="list" aria-label="Melodic prompt tags"></div>
+            <div class="tag-entry">
+              <input class="tag-input" type="text" maxlength="120" placeholder="Add a melodic idea…" aria-label="Add melodic prompt tag">
+              <button class="add-tag" type="button">ADD</button>
+            </div>
+            <details class="prompt-preview"><summary>MODEL PROMPT <span>VIEW</span></summary><code class="constructed-prompt">—</code></details>
+            <div class="reference-drop" tabindex="0" role="button" aria-label="Import a melodic reference audio file">
+              <input class="reference-input" type="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.m4a" hidden>
+              <span>↧</span><strong>IMPORT</strong><small>or click to choose · fitted to track length</small>
+            </div>
+          </section>
+          <section class="channel-section">
+            <div class="section-line"><span>CHANNEL</span><small class="duration-readout">16 BEATS · 8.0S</small></div>
+            <div class="channel-buttons"><button class="mute-button" type="button">MUTE</button><button class="solo-button" type="button">SOLO</button></div>
+            <label class="control-row"><span>VOLUME</span><input class="volume" type="range" min="0" max="1.5" step="0.01"><output></output></label>
+            <label class="control-row"><span>HIGH PASS</span><input class="highpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row"><span>LOW PASS</span><input class="lowpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row send"><span>REVERB SEND</span><input class="reverb-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+            <label class="control-row send"><span>DELAY SEND</span><input class="delay-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+          </section>
+        </div>
+        <details class="generation-settings">
+          <summary>GENERATION SETTINGS <span>MODEL · BEATS · MUTATION INTERVAL · CFG · STEPS · SEED</span></summary>
+          <div class="settings-grid">
+            <label><span>MODEL</span><select class="model"><option value="sm-music">Small Music</option><option value="sm-sfx">Small SFX</option><option value="medium">Medium</option></select></label>
+            <label><span>LOOP BEATS</span><select class="beats"><option>4</option><option>8</option><option selected>16</option><option>32</option><option>64</option></select></label>
+            <label><span>MUTATION</span><input class="mutation" type="number" min="0.01" max="1" step="0.01"></label>
+            <label><span>CFG</span><input class="cfg" type="number" min="-20" max="20" step="0.1"></label>
+            <label><span>STEPS</span><input class="steps" type="number" min="1" max="64" step="1"></label>
+            <label><span>MUTATION INTERVAL</span><select class="mutation-interval"><option value="1">Every loop</option><option value="2">Every 2 loops</option><option value="4">Every 4 loops</option><option value="8">Every 8 loops</option></select></label>
+            <label><span>SEED MODE</span><select class="seed-mode"><option value="random">Fresh</option><option value="increment">Increment</option><option value="fixed">Fixed</option></select></label>
+            <label class="seed-wrap"><span>SEED</span><input class="seed" type="number" step="1" value="42000"></label>
+            <label class="wide"><span>ROLE PROMPT</span><input class="role-prompt" type="text"></label>
+            <label class="wide"><span>NEGATIVE PROMPT</span><input class="negative-prompt" type="text"></label>
+          </div>
+          <div class="storage-actions"><button class="flush-track" type="button">FLUSH MELODIC HISTORY</button><button class="clear-output" type="button">CLEAR MELODIC OUTPUT</button><small>Clear output removes the current loop and history, but preserves settings</small></div>
+        </details>
+        <div class="track-error hidden" role="alert"></div>
+      </article>
+
+      <article class="track" data-track="percussion" style="--track:#ff9f68">
+        <div class="track-head">
+          <div class="track-number">02</div>
+          <div><p>SA3 SMALL MUSIC</p><h2>Percussion</h2><small>STRUCTURED / RHYTHMIC / LOOPED</small></div>
+          <div class="track-state"><span class="phase">EMPTY</span><span class="generation">GEN —</span></div>
+          <button class="freeze-button" type="button">FREEZE</button>
+        </div>
+        <div class="track-body">
+          <section class="prompt-section">
+            <div class="section-line"><span>PROMPT TAGS</span><small class="sync-state">SAVED</small></div>
+            <div class="prompt-cloud" role="list" aria-label="Percussion prompt tags"></div>
+            <div class="tag-entry">
+              <input class="tag-input" type="text" maxlength="120" placeholder="Add a rhythmic idea…" aria-label="Add percussion prompt tag">
+              <button class="add-tag" type="button">ADD</button>
+            </div>
+            <details class="prompt-preview"><summary>MODEL PROMPT <span>VIEW</span></summary><code class="constructed-prompt">—</code></details>
+            <div class="reference-drop" tabindex="0" role="button" aria-label="Import a percussion reference audio file">
+              <input class="reference-input" type="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.m4a" hidden>
+              <span>↧</span><strong>IMPORT</strong><small>or click to choose · fitted to track length</small>
+            </div>
+          </section>
+          <section class="channel-section">
+            <div class="section-line"><span>CHANNEL</span><small class="duration-readout">16 BEATS · 8.0S</small></div>
+            <div class="channel-buttons"><button class="mute-button" type="button">MUTE</button><button class="solo-button" type="button">SOLO</button></div>
+            <label class="control-row"><span>VOLUME</span><input class="volume" type="range" min="0" max="1.5" step="0.01"><output></output></label>
+            <label class="control-row"><span>HIGH PASS</span><input class="highpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row"><span>LOW PASS</span><input class="lowpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row send"><span>REVERB SEND</span><input class="reverb-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+            <label class="control-row send"><span>DELAY SEND</span><input class="delay-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+          </section>
+        </div>
+        <details class="generation-settings">
+          <summary>GENERATION SETTINGS <span>MODEL · BEATS · MUTATION INTERVAL · CFG · STEPS · SEED</span></summary>
+          <div class="settings-grid">
+            <label><span>MODEL</span><select class="model"><option value="sm-music">Small Music</option><option value="sm-sfx">Small SFX</option><option value="medium">Medium</option></select></label>
+            <label><span>LOOP BEATS</span><select class="beats"><option>4</option><option>8</option><option selected>16</option><option>32</option><option>64</option></select></label>
+            <label><span>MUTATION</span><input class="mutation" type="number" min="0.01" max="1" step="0.01"></label>
+            <label><span>CFG</span><input class="cfg" type="number" min="-20" max="20" step="0.1"></label>
+            <label><span>STEPS</span><input class="steps" type="number" min="1" max="64" step="1"></label>
+            <label><span>MUTATION INTERVAL</span><select class="mutation-interval"><option value="1">Every loop</option><option value="2">Every 2 loops</option><option value="4">Every 4 loops</option><option value="8">Every 8 loops</option></select></label>
+            <label><span>SEED MODE</span><select class="seed-mode"><option value="random">Fresh</option><option value="increment">Increment</option><option value="fixed">Fixed</option></select></label>
+            <label class="seed-wrap"><span>SEED</span><input class="seed" type="number" step="1" value="42000"></label>
+            <label class="wide"><span>ROLE PROMPT</span><input class="role-prompt" type="text"></label>
+            <label class="wide"><span>NEGATIVE PROMPT</span><input class="negative-prompt" type="text"></label>
+          </div>
+          <div class="storage-actions"><button class="flush-track" type="button">FLUSH PERCUSSION HISTORY</button><button class="clear-output" type="button">CLEAR PERCUSSION OUTPUT</button><small>Clear output removes the current loop and history, but preserves settings</small></div>
+        </details>
+        <div class="track-error hidden" role="alert"></div>
+      </article>
+
+      <article class="track" data-track="texture" style="--track:#70d9ff">
+        <div class="track-head">
+          <div class="track-number">03</div>
+          <div><p>SA3 SMALL FX</p><h2>Texture</h2><small>AMBIENT / DRONING / ENVIRONMENTAL</small></div>
+          <div class="track-state"><span class="phase">EMPTY</span><span class="generation">GEN —</span></div>
+          <button class="freeze-button" type="button">FREEZE</button>
+        </div>
+        <div class="track-body">
+          <section class="prompt-section">
+            <div class="section-line"><span>PROMPT TAGS</span><small class="sync-state">SAVED</small></div>
+            <div class="prompt-cloud" role="list" aria-label="Texture prompt tags"></div>
+            <div class="tag-entry">
+              <input class="tag-input" type="text" maxlength="120" placeholder="Add a textural idea…" aria-label="Add texture prompt tag">
+              <button class="add-tag" type="button">ADD</button>
+            </div>
+            <details class="prompt-preview"><summary>MODEL PROMPT <span>VIEW</span></summary><code class="constructed-prompt">—</code></details>
+            <div class="reference-drop" tabindex="0" role="button" aria-label="Import a texture reference audio file">
+              <input class="reference-input" type="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.m4a" hidden>
+              <span>↧</span><strong>IMPORT</strong><small>or click to choose · fitted to track length</small>
+            </div>
+          </section>
+          <section class="channel-section">
+            <div class="section-line"><span>CHANNEL</span><small class="duration-readout">16 BEATS · 8.0S</small></div>
+            <div class="channel-buttons"><button class="mute-button" type="button">MUTE</button><button class="solo-button" type="button">SOLO</button></div>
+            <label class="control-row"><span>VOLUME</span><input class="volume" type="range" min="0" max="1.5" step="0.01"><output></output></label>
+            <label class="control-row"><span>HIGH PASS</span><input class="highpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row"><span>LOW PASS</span><input class="lowpass" type="range" min="20" max="20000" step="1"><output></output></label>
+            <label class="control-row send"><span>REVERB SEND</span><input class="reverb-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+            <label class="control-row send"><span>DELAY SEND</span><input class="delay-send" type="range" min="0" max="1" step="0.01"><output></output></label>
+          </section>
+        </div>
+        <details class="generation-settings">
+          <summary>GENERATION SETTINGS <span>MODEL · BEATS · MUTATION INTERVAL · CFG · STEPS · SEED</span></summary>
+          <div class="settings-grid">
+            <label><span>MODEL</span><select class="model"><option value="sm-music">Small Music</option><option value="sm-sfx">Small SFX</option><option value="medium">Medium</option></select></label>
+            <label><span>LOOP BEATS</span><select class="beats"><option>4</option><option>8</option><option selected>16</option><option>32</option><option>64</option></select></label>
+            <label><span>MUTATION</span><input class="mutation" type="number" min="0.01" max="1" step="0.01"></label>
+            <label><span>CFG</span><input class="cfg" type="number" min="-20" max="20" step="0.1"></label>
+            <label><span>STEPS</span><input class="steps" type="number" min="1" max="64" step="1"></label>
+            <label><span>MUTATION INTERVAL</span><select class="mutation-interval"><option value="1">Every loop</option><option value="2">Every 2 loops</option><option value="4">Every 4 loops</option><option value="8">Every 8 loops</option></select></label>
+            <label><span>SEED MODE</span><select class="seed-mode"><option value="random">Fresh</option><option value="increment">Increment</option><option value="fixed">Fixed</option></select></label>
+            <label class="seed-wrap"><span>SEED</span><input class="seed" type="number" step="1" value="42000"></label>
+            <label class="wide"><span>ROLE PROMPT</span><input class="role-prompt" type="text"></label>
+            <label class="wide"><span>NEGATIVE PROMPT</span><input class="negative-prompt" type="text"></label>
+          </div>
+          <div class="storage-actions"><button class="flush-track" type="button">FLUSH TEXTURE HISTORY</button><button class="clear-output" type="button">CLEAR TEXTURE OUTPUT</button><small>Clear output removes the current loop and history, but preserves settings</small></div>
+        </details>
+        <div class="track-error hidden" role="alert"></div>
+      </article>
+    </section>
+
+    <details class="effects-panel">
+      <summary><span>GLOBAL EFFECTS</span><small>SIDECHAIN · REVERB · SYNC DELAY</small></summary>
+      <section class="effects-grid">
+        <article class="effect-card" id="sidechainCard">
+        <div class="effect-head"><div><p class="kicker">DYNAMIC ROUTING</p><h2>Percussion Sidechain</h2></div><label class="switch"><input id="sidechainEnabled" type="checkbox"><span></span><b>ON</b></label></div>
+        <p class="effect-description">The percussion envelope can independently duck the melodic and texture channels.</p>
+        <div class="sidechain-targets" aria-label="Sidechain destinations">
+          <label><input id="sidechainMelodic" type="checkbox"><span>MELODIC</span></label>
+          <label><input id="sidechainTexture" type="checkbox"><span>TEXTURE</span></label>
+        </div>
+        <div class="effect-controls">
+          <label><span>THRESHOLD</span><input id="scThreshold" type="range" min="-80" max="0" step="1"><output></output></label>
+          <label><span>RATIO</span><input id="scRatio" type="range" min="1" max="20" step="0.1"><output></output></label>
+          <label><span>ATTACK</span><input id="scAttack" type="range" min="0.1" max="250" step="0.1"><output></output></label>
+          <label><span>RELEASE</span><input id="scRelease" type="range" min="1" max="1000" step="1"><output></output></label>
+          <label><span>DEPTH</span><input id="scDepth" type="range" min="0" max="1" step="0.01"><output></output></label>
+          <label><span>MAKEUP</span><input id="scMakeup" type="range" min="-12" max="12" step="0.1"><output></output></label>
+        </div>
+        <div class="reduction-meter"><span id="reductionBar"></span><small id="reductionLabel">0.0 dB REDUCTION</small></div>
+        </article>
+
+        <article class="effect-card" id="reverbCard">
+        <div class="effect-head"><div><p class="kicker">SHARED SPACE</p><h2>Global Reverb</h2></div><label class="switch"><input id="reverbEnabled" type="checkbox"><span></span><b>ON</b></label></div>
+        <p class="effect-description">One persistent reverb return joins the three stems and carries naturally across loop changes.</p>
+        <div class="effect-controls">
+          <label><span>RETURN</span><input id="rvReturn" type="range" min="0" max="1" step="0.01"><output></output></label>
+          <label><span>DECAY</span><input id="rvDecay" type="range" min="0.1" max="12" step="0.1"><output></output></label>
+          <label><span>PRE-DELAY</span><input id="rvPredelay" type="range" min="0" max="250" step="1"><output></output></label>
+          <label><span>DAMPING</span><input id="rvDamping" type="range" min="200" max="20000" step="10"><output></output></label>
+        </div>
+        <div class="signal-path"><span>TRACK SENDS</span><i>→</i><span>PRE-DELAY</span><i>→</i><span>SPACE</span><i>→</i><span>MASTER</span></div>
+        </article>
+
+        <article class="effect-card" id="delayCard">
+        <div class="effect-head"><div><p class="kicker">TEMPO EFFECT</p><h2>Global Sync Delay</h2></div><label class="switch"><input id="delayEnabled" type="checkbox"><span></span><b>ON</b></label></div>
+        <p class="effect-description">A shared ping-pong delay locked to the global BPM, fed independently by each track.</p>
+        <div class="effect-controls">
+          <label><span>DIVISION</span><select id="delayDivision"><option value="1/1">1/1</option><option value="1/2">1/2</option><option value="1/4D">1/4 dotted</option><option value="1/4">1/4</option><option value="1/8D">1/8 dotted</option><option value="1/8">1/8</option><option value="1/8T">1/8 triplet</option><option value="1/16">1/16</option></select><output id="delayTimeReadout"></output></label>
+          <label><span>RETURN</span><input id="delayReturn" type="range" min="0" max="1" step="0.01"><output></output></label>
+          <label><span>FEEDBACK</span><input id="delayFeedback" type="range" min="0" max="0.92" step="0.01"><output></output></label>
+          <label><span>LOW PASS</span><input id="delayLowpass" type="range" min="200" max="20000" step="10"><output></output></label>
+          <label><span>WIDTH</span><input id="delayWidth" type="range" min="0" max="1" step="0.01"><output></output></label>
+        </div>
+        <div class="signal-path"><span>TRACK SENDS</span><i>→</i><span>BPM DIVISION</span><i>→</i><span>PING-PONG</span><i>→</i><span>MASTER</span></div>
+        </article>
+      </section>
+    </details>
+
+    <section class="history-section">
+      <div class="history-head"><div><p class="kicker">ACCEPTED LINEAGES</p><h2>Recent versions</h2></div><div class="history-actions"><button id="refreshHistory" type="button">REFRESH ↻</button><button id="flushAllHistory" type="button">FLUSH ALL HISTORY</button><button id="clearAllOutputs" type="button">CLEAR ALL OUTPUTS</button></div></div>
+      <div class="history-columns">
+        <div><h3 style="--track:#d8ff58">MELODIC</h3><div class="history-list" data-history="melodic"></div></div>
+        <div><h3 style="--track:#ff9f68">PERCUSSION</h3><div class="history-list" data-history="percussion"></div></div>
+        <div><h3 style="--track:#70d9ff">TEXTURE</h3><div class="history-list" data-history="texture"></div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>SA3 MUSIC × 2 / SA3 FX × 1</span><span>DRY STEMS · NON-DESTRUCTIVE MIXER</span><span>SHARED MLX / CUDA ENGINE</span></footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
