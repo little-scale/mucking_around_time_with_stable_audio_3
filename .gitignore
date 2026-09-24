@@ -1,0 +1,11 @@
+__pycache__/
+.pytest_cache/
+.venv/
+output/
+*.wav
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.npz
+.DS_Store

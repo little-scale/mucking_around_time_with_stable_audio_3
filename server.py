@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import shutil
+import tempfile
 import threading
 import time
 import traceback
@@ -19,7 +20,8 @@ from typing import Optional
 import numpy as np
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -53,7 +55,7 @@ STATIC = HERE / "static"
 RUN_ROOT = HERE / "output" / "monitor"
 RUN_ROOT.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.6.0")
+app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.7.0")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
@@ -299,6 +301,18 @@ def loop_mutator_page():
     return (STATIC / "loop-mutator.html").read_text(encoding="utf-8")
 
 
+@app.get("/beat-reconstructor", response_class=HTMLResponse)
+def beat_reconstructor_page():
+    """Four-track event sequencer and Stable Audio 3 loop reconstructor."""
+    return (STATIC / "beat-reconstructor" / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/live-audio-diffusion", response_class=HTMLResponse)
+def live_audio_diffusion_page():
+    """Deadline-driven, non-overlapping live audio-to-audio diffusion."""
+    return (STATIC / "live-audio-diffusion.html").read_text(encoding="utf-8")
+
+
 @app.get("/api/info")
 def info():
     if engine is None:
@@ -331,6 +345,162 @@ def _same_session(session_id: str) -> LatentSession:
     if session is None:
         raise HTTPException(404, "SAME lab session not found; encode Source A again")
     return session
+
+
+def _live_process_chunk(audio_bytes: bytes, config: dict, deadline_ms: float) -> tuple[bytes, dict]:
+    """Run one transient live chunk through the shared backend.
+
+    Live chunks are deliberately not added to the normal run archive.  The
+    browser already owns the dry source and only needs the processed WAV long
+    enough to replace its scheduled fallback block.
+    """
+    events: list[dict] = []
+
+    def emit(event: dict):
+        if event.get("type") == "run_complete":
+            events.append(event)
+
+    total_started = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="live-", dir=str(RUN_ROOT)) as work_dir:
+        work = Path(work_dir)
+        input_path = work / "input.wav"
+        output_path = work / "output.wav"
+        input_path.write_bytes(audio_bytes)
+        wait_started = time.perf_counter()
+        acquired = accelerator_lock.acquire(timeout=max(0.05, deadline_ms / 1000.0))
+        queue_ms = (time.perf_counter() - wait_started) * 1000.0
+        if not acquired:
+            raise TimeoutError(f"accelerator remained busy for the {deadline_ms:.0f} ms live deadline")
+        try:
+            inference_started = time.perf_counter()
+            result = engine.generate(
+                output_path=str(output_path),
+                emit=emit,
+                input_audio=str(input_path),
+                mode="audio",
+                **config,
+            )
+            inference_ms = (time.perf_counter() - inference_started) * 1000.0
+        finally:
+            accelerator_lock.release()
+        if not output_path.exists():
+            raise RuntimeError("backend completed without producing a WAV file")
+        output_bytes = output_path.read_bytes()
+
+    backend_timing = result.get("timing", {}) if isinstance(result, dict) else {}
+    if events and not backend_timing:
+        backend_timing = events[-1].get("timing", {})
+    timing = {
+        "queue_ms": queue_ms,
+        "inference_ms": inference_ms,
+        "total_ms": (time.perf_counter() - total_started) * 1000.0,
+        "realtime": float(config["seconds"]) / max(inference_ms / 1000.0, 1e-9),
+        "backend": backend_timing,
+    }
+    return output_bytes, timing
+
+
+@app.post("/api/live/process")
+async def live_process(
+    request: Request,
+    audio: UploadFile = File(...),
+    session_id: str = Form("live"),
+    chunk_id: int = Form(0),
+    prompt: str = Form(""),
+    negative_prompt: str = Form(""),
+    dit: str = Form("sm-music"),
+    decoder: str = Form("auto"),
+    seconds: float = Form(1.0),
+    steps: int = Form(8),
+    seed: str = Form(""),
+    cfg: float = Form(1.0),
+    apg: float = Form(1.0),
+    sigma_max: float = Form(1.0),
+    deadline_ms: float = Form(1000.0),
+):
+    """Transform one independent PCM WAV chunk and return the processed WAV."""
+    if engine is None:
+        raise HTTPException(503, "backend not configured")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", session_id or ""):
+        raise HTTPException(400, "invalid live session id")
+    if chunk_id < 0:
+        raise HTTPException(400, "chunk id must be non-negative")
+    if dit not in engine.dit_choices:
+        raise HTTPException(400, f"unknown DiT: {dit}")
+    if decoder != "auto" and decoder not in engine.decoder_choices:
+        raise HTTPException(400, f"unknown decoder: {decoder}")
+    if not 0.25 <= seconds <= min(10.0, float(engine.max_seconds)):
+        raise HTTPException(400, "live chunk duration must be between 0.25 and 10 seconds")
+    if not 1 <= steps <= 64:
+        raise HTTPException(400, "steps must be between 1 and 64")
+    if not all(np.isfinite(value) for value in (seconds, cfg, apg, sigma_max)):
+        raise HTTPException(400, "live parameters must be finite numbers")
+    if sigma_max < 0.01:
+        raise HTTPException(400, "sigma max must be >= 0.01")
+    if not np.isfinite(deadline_ms) or not 50 <= deadline_ms <= 30_000:
+        raise HTTPException(400, "live deadline must be between 50 and 30000 ms")
+    try:
+        seed_value = None if seed.strip() == "" else int(seed.strip())
+    except ValueError:
+        raise HTTPException(400, "seed must be an integer or blank")
+
+    audio_bytes = await audio.read(8 * 1024 * 1024 + 1)
+    if not audio_bytes:
+        raise HTTPException(400, "audio chunk is empty")
+    if len(audio_bytes) > 8 * 1024 * 1024:
+        raise HTTPException(413, "audio chunk exceeds the 8 MiB live limit")
+    if audio_bytes[:4] not in {b"RIFF", b"RF64"} or audio_bytes[8:12] != b"WAVE":
+        raise HTTPException(400, "live input must be a PCM WAV chunk")
+
+    config = {
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "seconds": float(seconds),
+        "steps": int(steps),
+        "seed": seed_value,
+        "cfg": float(cfg),
+        "apg": float(apg),
+        "sigma_max": float(sigma_max),
+        "dit_name": dit,
+        "decoder_name": decoder,
+    }
+    client_ip = request.client.host if request.client else "unknown"
+    log_base = {
+        "session_id": session_id,
+        "chunk_id": chunk_id,
+        "ip": client_ip,
+        "seconds": seconds,
+        "model": dit,
+        "steps": steps,
+        "cfg": cfg,
+        "apg": apg,
+        "sigma_max": sigma_max,
+        "prompt": prompt,
+    }
+    print("LIVE_AUDIO_DIFFUSION " + json.dumps({"event": "received", **log_base}, ensure_ascii=False, separators=(",", ":")), flush=True)
+    try:
+        output_bytes, timing = await run_in_threadpool(_live_process_chunk, audio_bytes, config, float(deadline_ms))
+    except TimeoutError as exc:
+        print("LIVE_AUDIO_DIFFUSION " + json.dumps({"event": "deadline", **log_base, "error": str(exc)}, ensure_ascii=False, separators=(",", ":")), flush=True)
+        raise HTTPException(409, str(exc))
+    except Exception as exc:
+        print("LIVE_AUDIO_DIFFUSION " + json.dumps({"event": "error", **log_base, "error": f"{type(exc).__name__}: {exc}"}, ensure_ascii=False, separators=(",", ":")), flush=True)
+        traceback.print_exc()
+        raise HTTPException(500, f"live chunk failed: {type(exc).__name__}: {exc}")
+    print("LIVE_AUDIO_DIFFUSION " + json.dumps({"event": "complete", **log_base, **{k: round(v, 3) for k, v in timing.items() if isinstance(v, (int, float))}}, ensure_ascii=False, separators=(",", ":")), flush=True)
+    return Response(
+        content=output_bytes,
+        media_type="audio/wav",
+        headers={
+            "Cache-Control": "no-store",
+            "X-SA3-Session-ID": session_id,
+            "X-SA3-Chunk-ID": str(chunk_id),
+            "X-SA3-Queue-Ms": f"{timing['queue_ms']:.3f}",
+            "X-SA3-Inference-Ms": f"{timing['inference_ms']:.3f}",
+            "X-SA3-Total-Ms": f"{timing['total_ms']:.3f}",
+            "X-SA3-Realtime": f"{timing['realtime']:.6f}",
+        },
+    )
 
 
 def _write_wav(path: Path, audio: np.ndarray, sample_rate: int = SAME_SAMPLE_RATE):
@@ -831,8 +1001,12 @@ def main():
     ap.add_argument("--osc", action="store_true", help="Enable session-routed SAME Lab OSC control")
     ap.add_argument("--osc-host", default="127.0.0.1", help="OSC UDP bind address (use 0.0.0.0 only on a trusted LAN)")
     ap.add_argument("--osc-port", type=int, default=9000, help="SAME Lab OSC UDP port (default: 9000)")
+    ap.add_argument("--ssl-certfile", default=None, help="TLS certificate PEM for HTTPS (required for browser audio capture over LAN)")
+    ap.add_argument("--ssl-keyfile", default=None, help="TLS private-key PEM paired with --ssl-certfile")
     ap.add_argument("--diagnose", action="store_true", help="Print backend dependency probes and exit")
     args = ap.parse_args()
+    if bool(args.ssl_certfile) != bool(args.ssl_keyfile):
+        ap.error("--ssl-certfile and --ssl-keyfile must be supplied together")
     if args.diagnose:
         print(json.dumps({"platform": os.sys.platform, "python": os.sys.version, "backends": diagnostics_json(args.sa3_root)}, indent=2))
         return
@@ -855,7 +1029,8 @@ def main():
     if info.vram_total_bytes:
         print(f"  VRAM    : {info.vram_total_bytes / 2**30:.2f} GiB total")
     print(f"  outputs : {RUN_ROOT}")
-    print(f"  URL     : http://{'<this-linux-host-ip>' if host == '0.0.0.0' else host}:{args.port}")
+    scheme = "https" if args.ssl_certfile else "http"
+    print(f"  URL     : {scheme}://{'<this-linux-host-ip>' if host == '0.0.0.0' else host}:{args.port}")
     print(f"  OSC     : {'udp://' + args.osc_host + ':' + str(args.osc_port) if args.osc else 'disabled (enable with --osc)'}")
     if host == "0.0.0.0":
         print("  SECURITY: listening on all interfaces; allow port 7861 only from your trusted LAN.")
@@ -863,7 +1038,15 @@ def main():
     if args.osc and args.osc_host == "0.0.0.0":
         print("  OSC SECURITY: accepting unauthenticated UDP on all interfaces.")
         print(f"                Allow UDP {args.osc_port} only from your trusted LAN; never expose it publicly.\n")
-    uvicorn.run(app, host=host, port=args.port, log_level="info", proxy_headers=False)
+    uvicorn.run(
+        app,
+        host=host,
+        port=args.port,
+        log_level="info",
+        proxy_headers=False,
+        ssl_certfile=args.ssl_certfile,
+        ssl_keyfile=args.ssl_keyfile,
+    )
 
 
 if __name__ == "__main__":

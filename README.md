@@ -11,6 +11,8 @@ A browser interface for Stable Audio 3 with interchangeable **CUDA/PyTorch** and
 | `/same-lab` | SAME latent editing and optional OSC control |
 | `/drift` | Three-track Drift Looper |
 | `/loop-mutator` | Focused single-loop mutation instrument |
+| `/beat-reconstructor` | Four-track event sequencer and loop reconstruction workstation |
+| `/live-audio-diffusion` | Non-overlapping, deadline-driven live audio-to-audio diffusion |
 
 Open `/` for the landing page and links to every tool.
 
@@ -101,6 +103,7 @@ Useful overrides:
 ./sa3-monitor --backend cuda --host 0.0.0.0 --port 7861
 ./sa3-monitor --backend cuda --sa3-root /path/to/stable-audio-3
 ./sa3-monitor --backend cuda --output-dir /path/to/output
+./sa3-monitor --backend cuda --ssl-certfile /path/to/lan-cert.pem --ssl-keyfile /path/to/lan-key.pem
 ```
 
 Auto-detection prefers usable CUDA on Linux, then MLX on Apple Silicon. It does not silently fall back to CPU. Backend, device, VRAM, dtype, output path, and startup errors are shown in the terminal and UI.
@@ -115,6 +118,45 @@ Auto-detection prefers usable CUDA on Linux, then MLX on Apple Silicon. It does 
 - Clear Output removes generated lineage files while preserving controls.
 
 All interfaces share one accelerator lock. Concurrent generation requests are serialized, with the client IP and prompt printed first in the Linux terminal. Each browser receives the events and audio for its own run ID.
+
+## Live Audio Diffusion
+
+The live page records independent PCM chunks in the browser and sends one chunk
+at a time through SA3 audio conditioning. Every dry chunk is scheduled first on
+a fixed output timeline. A processed result replaces it when inference finishes
+before the playback deadline; late or failed chunks remain dry, so the stream
+does not stop or accumulate unbounded latency. Model inputs never overlap.
+
+Microphone and audio-interface capture requires a browser secure context.
+`http://127.0.0.1` and `http://localhost` are accepted by browsers, but a page
+opened from another computer as `http://<linux-ip>:7861` normally cannot request
+an input device. For LAN capture, either use `--ssl-certfile` plus
+`--ssl-keyfile` with a certificate trusted by the browser computer, or put SA3
+Monitor behind a trusted HTTPS reverse proxy. The certificate must include the
+hostname or IP used in the browser. Keep the service private: it has no
+authentication.
+
+For one remote browser, an SSH tunnel is the simplest secure option and works
+without certificates or internet access. Bind SA3 Monitor locally on the GPU
+host:
+
+```bash
+./sa3-monitor --backend cuda --host 127.0.0.1 --port 7861
+```
+
+Then create the tunnel on the browser computer and open the localhost URL:
+
+```bash
+ssh -N -L 7862:127.0.0.1:7861 user@GPU_HOST
+```
+
+```text
+http://127.0.0.1:7862/live-audio-diffusion
+```
+
+The optional boundary fade defaults to off because independent, non-overlapping
+chunks would otherwise both attenuate at each join and create a short audible
+dip.
 
 ## SAME Lab and OSC
 

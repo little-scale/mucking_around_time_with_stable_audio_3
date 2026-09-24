@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>Live Audio Diffusion · SA3</title>
+  <style>
+    :root{color-scheme:dark;--bg:#000;--fg:#fff;--muted:#949494;--line:#393939;--dim:#171717;--danger:#ff6b6b}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,input,select,textarea{font:inherit;border-radius:0}
+    main{width:min(1440px,calc(100% - 32px));margin:auto;padding:28px 0 48px}
+    header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:end;border-bottom:1px solid var(--fg);padding-bottom:25px}
+    h1{font-size:clamp(38px,6vw,72px);font-weight:500;letter-spacing:-.055em;line-height:.92;margin:6px 0 0}
+    .eyebrow,.label,.metric span,.mono,.nav{font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}
+    .eyebrow,.hint,.metric span,.status-detail{color:var(--muted)}
+    .nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px}
+    a{color:inherit}.nav a{text-decoration:none;border-bottom:1px solid transparent}.nav a:hover{border-color:var(--fg)}
+    .transport{display:grid;grid-template-columns:auto auto 1fr;gap:12px;align-items:stretch;margin:18px 0}
+    button{background:#000;color:#fff;border:1px solid #fff;padding:13px 18px;cursor:pointer;text-transform:uppercase;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}
+    button:hover:not(:disabled),button.active{background:#fff;color:#000}button:disabled{opacity:.35;cursor:not-allowed}
+    .status-box{border:1px solid var(--line);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+    .status-box strong{font-weight:500}.status-detail{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meters{display:grid;grid-template-columns:repeat(6,1fr);border-top:1px solid var(--line);border-left:1px solid var(--line);margin-bottom:18px}
+    .metric{min-height:86px;padding:13px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .metric strong{display:block;font:25px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:15px;font-weight:400}
+    .workspace{display:grid;grid-template-columns:minmax(330px,.82fr) minmax(480px,1.5fr);border-top:1px solid var(--fg);border-left:1px solid var(--line)}
+    .panel{padding:18px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .panel h2{font-size:20px;font-weight:500;letter-spacing:-.02em;margin:0 0 17px}
+    .field{margin-bottom:15px}.label{display:flex;justify-content:space-between;color:#bbb;margin-bottom:6px}.label output{color:#fff}
+    input,select,textarea{width:100%;background:#090909;color:#fff;border:1px solid var(--line);padding:10px;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#fff}textarea{min-height:79px;resize:vertical}
+    input[type=range]{padding:0;border:0;accent-color:#fff}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row.three{grid-template-columns:repeat(3,1fr)}
+    .device-row{display:grid;grid-template-columns:1fr auto;gap:8px}.device-row button{padding:9px 11px}
+    .signal{height:12px;border:1px solid var(--line);margin-top:8px;padding:2px}.signal i{display:block;height:100%;width:0;background:#fff;transition:width .06s linear}
+    .timeline{min-height:390px;display:flex;flex-direction:column}
+    .timeline-head{display:flex;justify-content:space-between;gap:15px;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:12px}
+    .timeline-head h2{margin:0}.legend{display:flex;gap:14px;color:var(--muted)}
+    .stream{display:flex;align-items:stretch;min-height:94px;overflow:hidden;border:1px solid var(--line);margin:17px 0}
+    .chunk{min-width:76px;flex:1;border-right:1px solid #000;background:#fff;color:#000;padding:8px;display:flex;flex-direction:column;justify-content:space-between;font:10px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase}
+    .chunk.dry{background:#252525;color:#aaa}.chunk.pending{background:#777;color:#000}.chunk.error{background:#000;color:var(--danger);outline:1px solid var(--danger);outline-offset:-1px}.chunk:last-child{border-right:0}
+    .empty{padding:34px;color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em}
+    .log{flex:1;border-top:1px solid var(--line);margin-top:4px;overflow:auto;max-height:310px}
+    .log-row{display:grid;grid-template-columns:68px 72px 1fr 96px;gap:12px;padding:9px 0;border-bottom:1px solid #242424;font:11px ui-monospace,SFMono-Regular,Menlo,monospace}
+    .log-row span:nth-child(3){color:#bbb}.log-row span:last-child{text-align:right}
+    .notice{margin-top:18px;border:1px solid var(--line);padding:13px;color:#bbb}.notice.bad{border-color:var(--danger);color:var(--danger)}
+    .download{display:none;margin-top:14px;padding:10px 12px;border:1px solid #fff;text-decoration:none;text-transform:uppercase;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}.download.visible{display:inline-block}.download:hover{background:#fff;color:#000}
+    @media(max-width:960px){header{grid-template-columns:1fr}.nav{justify-content:flex-start}.meters{grid-template-columns:repeat(3,1fr)}.workspace{grid-template-columns:1fr}.transport{grid-template-columns:1fr 1fr}.status-box{grid-column:1/-1}.row.three{grid-template-columns:1fr}}
+    @media(max-width:560px){main{width:min(100% - 18px,1440px)}.meters{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.log-row{grid-template-columns:52px 62px 1fr}.log-row span:last-child{display:none}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><div class="eyebrow">Stable Audio 3 · deadline-driven audio-to-audio</div><h1>Live Audio Diffusion</h1></div>
+    <nav class="nav"><a href="/">Home</a><a href="/monitor">Monitor</a><a href="/loop-mutator">Loop Mutator</a><a href="/beat-reconstructor">Beat Reconstructor</a></nav>
+  </header>
+
+  <section class="transport">
+    <button id="start">Start stream</button><button id="stop" disabled>Stop</button>
+    <div class="status-box"><strong id="status">Ready</strong><span class="status-detail" id="statusDetail">Waiting for an input stream</span></div>
+  </section>
+
+  <section class="meters" aria-label="Live stream metrics">
+    <div class="metric"><span>Input level</span><strong id="inputLevel">−∞ dB</strong></div>
+    <div class="metric"><span>Captured</span><strong id="captured">0</strong></div>
+    <div class="metric"><span>Processed</span><strong id="processed">0</strong></div>
+    <div class="metric"><span>Dry fallback</span><strong id="dryCount">0</strong></div>
+    <div class="metric"><span>Inference</span><strong id="inference">—</strong></div>
+    <div class="metric"><span>Real-time</span><strong id="realtime">—</strong></div>
+  </section>
+
+  <section class="workspace">
+    <div class="panel">
+      <h2>Stream</h2>
+      <div class="field">
+        <label class="label" for="device">Input device</label>
+        <div class="device-row"><select id="device"><option value="">System default input</option></select><button id="devices" title="Refresh input devices">Refresh</button></div>
+        <div class="signal"><i id="signal"></i></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="chunkSeconds">Chunk length</label><select id="chunkSeconds"><option value="0.5">500 ms</option><option value="1" selected>1000 ms</option><option value="2">2000 ms</option><option value="4">4000 ms</option></select></div>
+        <div class="field"><label class="label" for="returnBuffer">Return buffer</label><select id="returnBuffer"><option value="0.25">250 ms</option><option value="0.5">500 ms</option><option value="1" selected>1000 ms</option><option value="2">2000 ms</option><option value="4">4000 ms</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="edgeFade">Boundary fade</label><select id="edgeFade"><option value="0" selected>Off</option><option value="2">2 ms</option><option value="5">5 ms</option><option value="10">10 ms</option></select></div>
+        <div class="field"><label class="label" for="outputGain">Output <output id="gainValue">0 dB</output></label><input id="outputGain" type="range" min="-30" max="6" step="1" value="0"></div>
+      </div>
+      <p class="hint">Chunks are consecutive and never overlap. The return buffer is the processing deadline after each chunk finishes recording. Wear headphones to avoid feedback.</p>
+      <a id="download" class="download" download="sa3-live-session.webm">Download last session</a>
+
+      <h2 style="margin-top:28px">Model</h2>
+      <div class="row">
+        <div class="field"><label class="label" for="model">DiT model</label><select id="model"><option value="sm-music">Music Small</option><option value="medium">Music Medium</option><option value="sm-sfx">SFX Small</option></select></div>
+        <div class="field"><label class="label" for="steps">Steps</label><input id="steps" type="number" min="1" max="64" value="8"></div>
+      </div>
+      <div class="field"><label class="label" for="prompt">Prompt</label><textarea id="prompt" placeholder="Describe the desired transformation"></textarea></div>
+      <div class="field"><label class="label" for="negativePrompt">Negative prompt</label><input id="negativePrompt" placeholder="Optional exclusions"></div>
+      <div class="row three">
+        <div class="field"><label class="label" for="cfg">CFG</label><input id="cfg" type="number" min="0" max="20" step="0.1" value="1"></div>
+        <div class="field"><label class="label" for="apg">APG</label><input id="apg" type="number" min="0" max="20" step="0.1" value="1"></div>
+        <div class="field"><label class="label" for="sigma">Max sigma</label><input id="sigma" type="number" min="0.01" max="10" step="0.01" value="0.5"></div>
+      </div>
+      <div class="field"><label class="label" for="seed">Seed</label><input id="seed" inputmode="numeric" placeholder="Blank = random; a value is reused for every chunk"></div>
+    </div>
+
+    <div class="panel timeline">
+      <div class="timeline-head"><h2>Return timeline</h2><div class="legend mono"><span>White processed</span><span>Grey dry</span></div></div>
+      <div class="stream" id="stream"><div class="empty">Start the stream to capture chunk 0000</div></div>
+      <div class="log" id="log"><div class="empty">No chunks captured</div></div>
+      <div class="notice" id="notice">The page schedules dry audio first. A completed SA3 response replaces that block only if it arrives before the fixed playback deadline.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const ui={start:$('start'),stop:$('stop'),status:$('status'),statusDetail:$('statusDetail'),device:$('device'),devices:$('devices'),chunkSeconds:$('chunkSeconds'),returnBuffer:$('returnBuffer'),edgeFade:$('edgeFade'),outputGain:$('outputGain'),gainValue:$('gainValue'),model:$('model'),steps:$('steps'),prompt:$('prompt'),negativePrompt:$('negativePrompt'),cfg:$('cfg'),apg:$('apg'),sigma:$('sigma'),seed:$('seed'),inputLevel:$('inputLevel'),signal:$('signal'),captured:$('captured'),processed:$('processed'),dryCount:$('dryCount'),inference:$('inference'),realtime:$('realtime'),stream:$('stream'),log:$('log'),notice:$('notice'),download:$('download')};
+const state={running:false,generation:0,ctx:null,media:null,source:null,worklet:null,mute:null,master:null,recordDest:null,recorder:null,recorded:[],recordUrl:null,blocks:[],blockOffset:0,queuedFrames:0,framesPerChunk:0,chunkSeconds:1,returnBuffer:1,startedAt:0,index:0,pending:[],processing:false,scheduled:new Map(),rows:new Map(),metrics:{captured:0,processed:0,dry:0,late:0,error:0,inference:[]},levelUpdated:0,wakeLock:null};
+
+function setStatus(title,detail){ui.status.textContent=title;ui.statusDetail.textContent=detail||''}
+function number(id,fallback){const value=Number(ui[id].value);return Number.isFinite(value)?value:fallback}
+function db(value){return value>1e-5?`${(20*Math.log10(value)).toFixed(1)} dB`:'−∞ dB'}
+function updateMetrics(){
+  ui.captured.textContent=state.metrics.captured;
+  ui.processed.textContent=state.metrics.processed;
+  ui.dryCount.textContent=state.metrics.dry;
+  const values=state.metrics.inference;
+  ui.inference.textContent=values.length?`${Math.round(values.reduce((a,b)=>a+b,0)/values.length)} ms`:'—';
+  const avg=values.length?values.reduce((a,b)=>a+b,0)/values.length:0;
+  ui.realtime.textContent=avg?`${(state.chunkSeconds*1000/avg).toFixed(2)}×`:'—';
+}
+function snapshotControls(){return {prompt:ui.prompt.value,negative_prompt:ui.negativePrompt.value,dit:ui.model.value,steps:String(Math.max(1,Math.min(64,number('steps',8)))),seed:ui.seed.value.trim(),cfg:String(number('cfg',1)),apg:String(number('apg',1)),sigma_max:String(Math.max(.01,number('sigma',.5)))}}
+function lockStreamControls(locked){for(const element of [ui.device,ui.devices,ui.chunkSeconds,ui.returnBuffer])element.disabled=locked}
+
+async function refreshDevices(){
+  if(!navigator.mediaDevices?.enumerateDevices)return;
+  const previous=ui.device.value;
+  const devices=(await navigator.mediaDevices.enumerateDevices()).filter(item=>item.kind==='audioinput');
+  ui.device.innerHTML='<option value="">System default input</option>';
+  devices.forEach((item,index)=>{const option=document.createElement('option');option.value=item.deviceId;option.textContent=item.label||`Audio input ${index+1}`;ui.device.append(option)});
+  if([...ui.device.options].some(option=>option.value===previous))ui.device.value=previous;
+}
+
+function resample(input,inputRate,outputRate,targetLength){
+  if(inputRate===outputRate&&input.length===targetLength)return input;
+  const output=new Float32Array(targetLength), scale=(input.length-1)/Math.max(1,targetLength-1);
+  for(let i=0;i<targetLength;i++){const position=i*scale,lo=Math.floor(position),hi=Math.min(input.length-1,lo+1),mix=position-lo;output[i]=input[lo]*(1-mix)+input[hi]*mix}
+  return output;
+}
+function encodeWav(left,right,sampleRate=44100){
+  const frames=Math.min(left.length,right.length),buffer=new ArrayBuffer(44+frames*4),view=new DataView(buffer);
+  const text=(offset,value)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i))};
+  text(0,'RIFF');view.setUint32(4,36+frames*4,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,2,true);view.setUint32(24,sampleRate,true);view.setUint32(28,sampleRate*4,true);view.setUint16(32,4,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,frames*4,true);
+  let offset=44;for(let i=0;i<frames;i++){for(const sample of [left[i],right[i]]){const value=Math.max(-1,Math.min(1,sample));view.setInt16(offset,value<0?value*32768:value*32767,true);offset+=2}}
+  return new Blob([buffer],{type:'audio/wav'});
+}
+function applyFade(buffer){
+  const frames=Math.min(Math.floor(buffer.sampleRate*number('edgeFade',0)/1000),Math.floor(buffer.length/2));
+  if(!frames)return buffer;
+  for(let channel=0;channel<buffer.numberOfChannels;channel++){const data=buffer.getChannelData(channel);for(let i=0;i<frames;i++){const gain=(i+1)/(frames+1);data[i]*=gain;data[data.length-1-i]*=gain}}
+  return buffer;
+}
+function dryBuffer(left,right){
+  const buffer=state.ctx.createBuffer(2,left.length,state.ctx.sampleRate);buffer.copyToChannel(left,0);buffer.copyToChannel(right,1);return applyFade(buffer);
+}
+function exactBuffer(decoded){
+  const length=Math.round(state.ctx.sampleRate*state.chunkSeconds),buffer=state.ctx.createBuffer(2,length,state.ctx.sampleRate);
+  for(let channel=0;channel<2;channel++){const source=decoded.getChannelData(Math.min(channel,decoded.numberOfChannels-1));buffer.copyToChannel(resample(source,decoded.sampleRate,state.ctx.sampleRate,length),channel)}
+  return applyFade(buffer);
+}
+function sourceAt(buffer,when){const source=state.ctx.createBufferSource();source.buffer=buffer;source.connect(state.master);source.start(when);return source}
+
+function addTimelineChunk(chunk){
+  if(chunk.index===0)ui.stream.innerHTML='';
+  const element=document.createElement('div');element.className='chunk dry';element.innerHTML=`<span>${String(chunk.index).padStart(4,'0')}</span><b>DRY</b>`;ui.stream.append(element);while(ui.stream.children.length>12)ui.stream.firstChild.remove();chunk.element=element;
+  if(chunk.index===0)ui.log.innerHTML='';
+  const row=document.createElement('div');row.className='log-row';row.innerHTML=`<span>#${String(chunk.index).padStart(4,'0')}</span><span>CAPTURED</span><span>Waiting for model</span><span>deadline ${Math.round(state.returnBuffer*1000)} ms</span>`;ui.log.prepend(row);while(ui.log.children.length>40)ui.log.lastChild.remove();chunk.row=row;
+}
+function setChunkStatus(chunk,kind,message,timing=''){
+  if(chunk.element){chunk.element.className=`chunk ${kind}`;chunk.element.querySelector('b').textContent=kind.toUpperCase()}
+  if(chunk.row){const cells=chunk.row.children;cells[1].textContent=kind.toUpperCase();cells[2].textContent=message;cells[3].textContent=timing}
+}
+
+function scheduleDry(chunk){
+  chunk.kind='dry';chunk.source=sourceAt(dryBuffer(chunk.left,chunk.right),chunk.playAt);state.scheduled.set(chunk.index,chunk);
+  const token=state.generation;setTimeout(()=>{if(token!==state.generation||chunk.counted)return;chunk.counted=true;if(chunk.kind==='dry'){state.metrics.dry++;setChunkStatus(chunk,'dry',chunk.reason||'Dry fallback played','on time');updateMetrics()}},Math.max(0,(chunk.playAt-state.ctx.currentTime)*1000+30));
+}
+
+function pullFrames(count){
+  const left=new Float32Array(count),right=new Float32Array(count);let written=0;
+  while(written<count&&state.blocks.length){const block=state.blocks[0],available=block.left.length-state.blockOffset,take=Math.min(available,count-written);left.set(block.left.subarray(state.blockOffset,state.blockOffset+take),written);right.set(block.right.subarray(state.blockOffset,state.blockOffset+take),written);written+=take;state.blockOffset+=take;if(state.blockOffset===block.left.length){state.blocks.shift();state.blockOffset=0}}
+  state.queuedFrames-=count;return {left,right};
+}
+function receiveBlock(left,right){
+  if(!state.running)return;
+  state.blocks.push({left,right});state.queuedFrames+=left.length;
+  const now=performance.now();if(now-state.levelUpdated>80){let sum=0;for(let i=0;i<left.length;i++)sum+=left[i]*left[i];const rms=Math.sqrt(sum/left.length);ui.inputLevel.textContent=db(rms);ui.signal.style.width=`${Math.min(100,rms*260)}%`;state.levelUpdated=now}
+  while(state.queuedFrames>=state.framesPerChunk){const audio=pullFrames(state.framesPerChunk);captureChunk(audio.left,audio.right)}
+}
+function captureChunk(left,right){
+  const index=state.index++,playAt=state.startedAt+(index+1)*state.chunkSeconds+state.returnBuffer;
+  const chunk={index,left,right,playAt,controls:snapshotControls(),capturedAt:performance.now()};
+  state.metrics.captured++;addTimelineChunk(chunk);scheduleDry(chunk);state.pending.push(chunk);
+  while(state.pending.length>2){const stale=state.pending.shift();stale.reason='Skipped to preserve fixed latency';setChunkStatus(stale,'dry',stale.reason,'not sent')}
+  updateMetrics();pump(state.generation);
+}
+
+async function processChunk(chunk,token){
+  const targetFrames=Math.round(state.chunkSeconds*44100),left=resample(chunk.left,state.ctx.sampleRate,44100,targetFrames),right=resample(chunk.right,state.ctx.sampleRate,44100,targetFrames);
+  const data=new FormData();data.append('audio',encodeWav(left,right),'chunk.wav');data.append('session_id',`browser_${token}`);data.append('chunk_id',String(chunk.index));data.append('seconds',String(state.chunkSeconds));data.append('deadline_ms',String(Math.max(50,state.returnBuffer*1000-50)));for(const [key,value] of Object.entries(chunk.controls))data.append(key,value);
+  setChunkStatus(chunk,'pending','GPU processing','sent');
+  const requestStarted=performance.now(),response=await fetch('/api/live/process',{method:'POST',body:data});
+  if(!response.ok){let message=`HTTP ${response.status}`;try{message=(await response.json()).detail||message}catch{}throw new Error(message)}
+  const bytes=await response.arrayBuffer(),roundTrip=performance.now()-requestStarted,inferenceMs=Number(response.headers.get('X-SA3-Inference-Ms'))||roundTrip;
+  state.metrics.inference.push(inferenceMs);if(state.metrics.inference.length>20)state.metrics.inference.shift();
+  if(token!==state.generation||!state.ctx)return;
+  const decoded=await state.ctx.decodeAudioData(bytes.slice(0)),wet=exactBuffer(decoded),remaining=(chunk.playAt-state.ctx.currentTime)*1000;
+  if(remaining>45&&state.running){try{chunk.source.stop()}catch{}chunk.source=sourceAt(wet,chunk.playAt);chunk.kind='wet';state.metrics.processed++;setChunkStatus(chunk,'','Processed result scheduled',`${Math.round(roundTrip)} ms`);if(chunk.element){chunk.element.className='chunk';chunk.element.querySelector('b').textContent='WET'};if(chunk.row)chunk.row.children[1].textContent='WET'}else{chunk.reason=`Model missed deadline by ${Math.max(0,Math.round(-remaining))} ms`;state.metrics.late++;setChunkStatus(chunk,'dry',chunk.reason,`${Math.round(roundTrip)} ms`)}
+  updateMetrics();
+}
+async function pump(token){
+  if(state.processing||token!==state.generation||!state.running)return;
+  while(state.pending.length&&state.pending[0].playAt-state.ctx.currentTime<.08){const stale=state.pending.shift();stale.reason='Deadline passed before processing began';setChunkStatus(stale,'dry',stale.reason,'not sent')}
+  const chunk=state.pending.shift();if(!chunk)return;
+  state.processing=true;setStatus('Streaming',`Processing chunk ${String(chunk.index).padStart(4,'0')} · ${state.pending.length} waiting`);
+  try{await processChunk(chunk,token)}catch(error){chunk.reason=error.message;state.metrics.error++;setChunkStatus(chunk,'error',`Model error; dry audio retained`,error.message);ui.notice.className='notice bad';ui.notice.textContent=`Chunk ${chunk.index}: ${error.message}`}
+  finally{state.processing=false;if(token===state.generation&&state.running){setStatus('Streaming',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback · ${state.pending.length} waiting`);pump(token)}}
+}
+
+async function start(){
+  if(state.running)return;
+  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){ui.notice.className='notice bad';ui.notice.textContent='Audio capture is blocked because this is not a secure browser context. Open the page on localhost or serve it over HTTPS.';return}
+  ui.start.disabled=true;setStatus('Requesting input','Choose Allow in the browser microphone prompt');
+  try{
+    const constraints={audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}};if(ui.device.value)constraints.audio.deviceId={exact:ui.device.value};
+    const media=await navigator.mediaDevices.getUserMedia(constraints),AudioContext=window.AudioContext||window.webkitAudioContext,ctx=new AudioContext({latencyHint:'interactive'});await ctx.resume();
+    const processor=`class Capture extends AudioWorkletProcessor{process(inputs){const input=inputs[0];if(input&&input[0]){const left=new Float32Array(input[0]),right=new Float32Array(input[1]||input[0]);this.port.postMessage({left,right},[left.buffer,right.buffer])}return true}}registerProcessor('sa3-live-capture',Capture)`;
+    const moduleUrl=URL.createObjectURL(new Blob([processor],{type:'text/javascript'}));await ctx.audioWorklet.addModule(moduleUrl);URL.revokeObjectURL(moduleUrl);
+    state.ctx=ctx;state.media=media;state.source=ctx.createMediaStreamSource(media);state.worklet=new AudioWorkletNode(ctx,'sa3-live-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});state.mute=ctx.createGain();state.mute.gain.value=0;state.source.connect(state.worklet);state.worklet.connect(state.mute);state.mute.connect(ctx.destination);state.worklet.port.onmessage=event=>receiveBlock(event.data.left,event.data.right);
+    state.master=ctx.createGain();state.master.gain.value=10**(number('outputGain',0)/20);state.master.connect(ctx.destination);state.recordDest=ctx.createMediaStreamDestination();state.master.connect(state.recordDest);
+    state.recorded=[];if(window.MediaRecorder){state.recorder=new MediaRecorder(state.recordDest.stream);state.recorder.ondataavailable=event=>{if(event.data.size)state.recorded.push(event.data)};state.recorder.onstop=finishRecording;state.recorder.start(1000)}
+    state.running=true;state.generation++;state.chunkSeconds=number('chunkSeconds',1);state.returnBuffer=number('returnBuffer',1);state.framesPerChunk=Math.round(ctx.sampleRate*state.chunkSeconds);state.startedAt=ctx.currentTime;state.index=0;state.pending=[];state.processing=false;state.blocks=[];state.blockOffset=0;state.queuedFrames=0;state.scheduled.clear();state.metrics={captured:0,processed:0,dry:0,late:0,error:0,inference:[]};
+    ui.stream.innerHTML='<div class="empty">Capturing chunk 0000…</div>';ui.log.innerHTML='<div class="empty">Waiting for the first complete input chunk</div>';ui.notice.className='notice';ui.notice.textContent='Dry audio is scheduled continuously. Each successful SA3 result replaces its matching block before the playback deadline.';ui.download.classList.remove('visible');lockStreamControls(true);ui.stop.disabled=false;setStatus('Streaming',`${ctx.sampleRate} Hz capture · ${state.chunkSeconds*1000} ms non-overlapping chunks`);updateMetrics();await refreshDevices();
+    try{state.wakeLock=await navigator.wakeLock?.request('screen')}catch{}
+  }catch(error){ui.start.disabled=false;setStatus('Input unavailable',error.message);ui.notice.className='notice bad';ui.notice.textContent=error.message}
+}
+function finishRecording(){
+  if(!state.recorded.length)return;const type=state.recorder?.mimeType||'audio/webm';if(state.recordUrl)URL.revokeObjectURL(state.recordUrl);state.recordUrl=URL.createObjectURL(new Blob(state.recorded,{type}));ui.download.href=state.recordUrl;ui.download.download=type.includes('ogg')?'sa3-live-session.ogg':'sa3-live-session.webm';ui.download.classList.add('visible')
+}
+async function stop(){
+  if(!state.running)return;state.running=false;state.generation++;lockStreamControls(false);ui.stop.disabled=true;ui.start.disabled=false;state.media?.getTracks().forEach(track=>track.stop());for(const chunk of state.scheduled.values())try{chunk.source.stop()}catch{}state.scheduled.clear();try{state.recorder?.stop()}catch{}try{state.source?.disconnect();state.worklet?.disconnect();state.mute?.disconnect();state.master?.disconnect()}catch{}try{await state.ctx?.close()}catch{}try{await state.wakeLock?.release()}catch{}state.ctx=null;state.media=null;state.pending=[];state.blocks=[];ui.signal.style.width='0';ui.inputLevel.textContent='−∞ dB';setStatus('Stopped',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback`)
+}
+
+ui.start.addEventListener('click',start);ui.stop.addEventListener('click',stop);ui.devices.addEventListener('click',refreshDevices);ui.outputGain.addEventListener('input',()=>{const value=number('outputGain',0);ui.gainValue.textContent=`${value} dB`;if(state.master)state.master.gain.setTargetAtTime(10**(value/20),state.ctx.currentTime,.01)});window.addEventListener('beforeunload',()=>{state.media?.getTracks().forEach(track=>track.stop())});
+fetch('/api/info').then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);return data}).then(info=>{const labels={'sm-music':'Music Small','medium':'Music Medium','sm-sfx':'SFX Small'};ui.model.innerHTML='';info.dit_choices.forEach(value=>{const option=document.createElement('option');option.value=value;option.textContent=labels[value]||value;ui.model.append(option)});setStatus('Ready',`${info.backend.backend.toUpperCase()} · ${info.backend.device_name}`)}).catch(error=>setStatus('Backend unavailable',error.message));
+refreshDevices();if(!window.isSecureContext){ui.notice.className='notice bad';ui.notice.textContent='This LAN page is not a secure browser context, so audio input will be blocked. Use localhost on the server or configure HTTPS for LAN capture.'}
+</script>
+</body>
+</html>

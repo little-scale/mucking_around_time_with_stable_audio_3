@@ -1,3 +1,4 @@
+import io
 import json
 import struct
 import time
@@ -104,13 +105,15 @@ def test_root_is_landing_page_and_monitor_keeps_pipeline_interface():
     client = TestClient(server.app)
     landing = (server.STATIC / "index.html").read_text(encoding="utf-8")
     assert client.get("/").text == landing
-    for href in ('href="/monitor"', 'href="/same-lab"', 'href="/sfx-matrix"', 'href="/drift"', 'href="/loop-mutator"'):
+    for href in ('href="/monitor"', 'href="/same-lab"', 'href="/sfx-matrix"', 'href="/drift"', 'href="/loop-mutator"', 'href="/beat-reconstructor"', 'href="/live-audio-diffusion"'):
         assert href in landing
     assert "Graphical Pipeline Monitor" in landing
     assert "SAME Lab" in landing
     assert "SFX Matrix" in landing
     assert "Drift Looper" in landing
     assert "Loop Mutator" in landing
+    assert "Beat Reconstructor" in landing
+    assert "Live Audio Diffusion" in landing
     assert "/api/info" in landing
 
     monitor = (server.STATIC / "monitor.html").read_text(encoding="utf-8")
@@ -119,15 +122,83 @@ def test_root_is_landing_page_and_monitor_keeps_pipeline_interface():
     assert response.text == monitor
     assert "backendName" in monitor
 
+    beat = (server.STATIC / "beat-reconstructor" / "index.html").read_text(encoding="utf-8")
+    beat_response = client.get("/beat-reconstructor")
+    assert beat_response.status_code == 200
+    assert beat_response.text == beat
+    beat_source = beat + "\n" + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (server.STATIC / "beat-reconstructor" / "assets").glob("*.js")
+    )
+    assert "/api/info" in beat_source
+    assert "/api/generate" in beat_source
+    assert "/api/run/" in beat_source
+    assert "/api/output/" in beat_source
+
+
+def test_live_audio_diffusion_page_and_chunk_api(tmp_path):
+    backend = StubBackend()
+    server.configure_backend(backend, tmp_path)
+    client = TestClient(server.app)
+    page = client.get("/live-audio-diffusion")
+    assert page.status_code == 200
+    assert "Live Audio Diffusion" in page.text
+    assert "/api/live/process" in page.text
+    assert "audioWorklet" in page.text
+    assert '<option value="0" selected>Off</option>' in page.text
+
+    wav = io.BytesIO()
+    with wave.open(wav, "wb") as output:
+        output.setnchannels(2)
+        output.setsampwidth(2)
+        output.setframerate(44_100)
+        output.writeframes(b"\0\0" * 2 * 441)
+    response = client.post(
+        "/api/live/process",
+        data={
+            "session_id": "test_session",
+            "chunk_id": "3",
+            "seconds": "1",
+            "prompt": "soft metallic texture",
+            "steps": "2",
+            "sigma_max": "0.5",
+        },
+        files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("audio/wav")
+    assert response.headers["x-sa3-chunk-id"] == "3"
+    assert float(response.headers["x-sa3-inference-ms"]) >= 0
+    assert not list(tmp_path.glob("live-*"))
+
+    invalid = client.post(
+        "/api/live/process",
+        data={"session_id": "bad/session", "seconds": "1"},
+        files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
+    )
+    assert invalid.status_code == 400
+
+    server.accelerator_lock.acquire()
+    try:
+        busy = client.post(
+            "/api/live/process",
+            data={"session_id": "test_session", "seconds": "1", "deadline_ms": "50"},
+            files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
+        )
+    finally:
+        server.accelerator_lock.release()
+    assert busy.status_code == 409
+    assert "live deadline" in busy.json()["detail"]
+
 
 def test_every_interface_links_directly_to_the_other_sections():
     pages = {
-        "index.html": ("/monitor", "/same-lab", "/sfx-matrix", "/drift", "/loop-mutator"),
-        "monitor.html": ("/", "/same-lab", "/sfx-matrix", "/drift", "/loop-mutator"),
-        "same-lab.html": ("/", "/monitor", "/sfx-matrix", "/drift", "/loop-mutator"),
-        "sfx-matrix.html": ("/", "/monitor", "/same-lab", "/drift", "/loop-mutator"),
-        "drift/index.html": ("/", "/monitor", "/same-lab", "/sfx-matrix", "/loop-mutator"),
-        "loop-mutator.html": ("/", "/monitor", "/same-lab", "/sfx-matrix", "/drift"),
+        "index.html": ("/monitor", "/same-lab", "/sfx-matrix", "/drift", "/loop-mutator", "/beat-reconstructor"),
+        "monitor.html": ("/", "/same-lab", "/sfx-matrix", "/drift", "/loop-mutator", "/beat-reconstructor"),
+        "same-lab.html": ("/", "/monitor", "/sfx-matrix", "/drift", "/loop-mutator", "/beat-reconstructor"),
+        "sfx-matrix.html": ("/", "/monitor", "/same-lab", "/drift", "/loop-mutator", "/beat-reconstructor"),
+        "drift/index.html": ("/", "/monitor", "/same-lab", "/sfx-matrix", "/loop-mutator", "/beat-reconstructor"),
+        "loop-mutator.html": ("/", "/monitor", "/same-lab", "/sfx-matrix", "/drift", "/beat-reconstructor"),
     }
     for filename, destinations in pages.items():
         html = (server.STATIC / filename).read_text(encoding="utf-8")
