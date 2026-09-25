@@ -55,7 +55,7 @@ STATIC = HERE / "static"
 RUN_ROOT = HERE / "output" / "monitor"
 RUN_ROOT.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.7.0")
+app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.8.0")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
@@ -429,16 +429,16 @@ async def live_process(
         raise HTTPException(400, f"unknown DiT: {dit}")
     if decoder != "auto" and decoder not in engine.decoder_choices:
         raise HTTPException(400, f"unknown decoder: {decoder}")
-    if not 0.25 <= seconds <= min(10.0, float(engine.max_seconds)):
-        raise HTTPException(400, "live chunk duration must be between 0.25 and 10 seconds")
+    if not 0.5 <= seconds <= min(10.0, float(engine.max_seconds)):
+        raise HTTPException(400, "live chunk duration must be between 0.5 and 10 seconds")
     if not 1 <= steps <= 64:
         raise HTTPException(400, "steps must be between 1 and 64")
     if not all(np.isfinite(value) for value in (seconds, cfg, apg, sigma_max)):
         raise HTTPException(400, "live parameters must be finite numbers")
     if sigma_max < 0.01:
         raise HTTPException(400, "sigma max must be >= 0.01")
-    if not np.isfinite(deadline_ms) or not 50 <= deadline_ms <= 30_000:
-        raise HTTPException(400, "live deadline must be between 50 and 30000 ms")
+    if not np.isfinite(deadline_ms) or not 500 <= deadline_ms <= 30_000:
+        raise HTTPException(400, "live deadline must be between 500 and 30000 ms")
     try:
         seed_value = None if seed.strip() == "" else int(seed.strip())
     except ValueError:

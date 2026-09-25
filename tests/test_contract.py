@@ -146,6 +146,12 @@ def test_live_audio_diffusion_page_and_chunk_api(tmp_path):
     assert "/api/live/process" in page.text
     assert "audioWorklet" in page.text
     assert '<option value="0" selected>Off</option>' in page.text
+    assert 'id="chunkMs" type="number" min="500"' in page.text
+    assert 'id="latencyMs" type="number" min="500"' in page.text
+    assert "4/4 musical chunk suggestions" in page.text
+    assert "window.max.bindInlet('stream'" in page.text
+    assert "maxOut('stream','start')" in page.text
+    assert "maxOut('stream','stop')" in page.text
 
     wav = io.BytesIO()
     with wave.open(wav, "wb") as output:
@@ -178,11 +184,25 @@ def test_live_audio_diffusion_page_and_chunk_api(tmp_path):
     )
     assert invalid.status_code == 400
 
+    too_short = client.post(
+        "/api/live/process",
+        data={"session_id": "test_session", "seconds": "0.499", "deadline_ms": "500"},
+        files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
+    )
+    assert too_short.status_code == 400
+
+    too_little_latency = client.post(
+        "/api/live/process",
+        data={"session_id": "test_session", "seconds": "1", "deadline_ms": "499"},
+        files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
+    )
+    assert too_little_latency.status_code == 400
+
     server.accelerator_lock.acquire()
     try:
         busy = client.post(
             "/api/live/process",
-            data={"session_id": "test_session", "seconds": "1", "deadline_ms": "50"},
+            data={"session_id": "test_session", "seconds": "1", "deadline_ms": "500"},
             files={"audio": ("chunk.wav", wav.getvalue(), "audio/wav")},
         )
     finally:

@@ -34,6 +34,8 @@
     input[type=range]{padding:0;border:0;accent-color:#fff}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row.three{grid-template-columns:repeat(3,1fr)}
     .device-row{display:grid;grid-template-columns:1fr auto;gap:8px}.device-row button{padding:9px 11px}
+    .readout{min-height:42px;border:1px solid var(--line);padding:10px;background:#090909;font:15px ui-monospace,SFMono-Regular,Menlo,monospace}
+    .suggestions{display:flex;flex-wrap:wrap;gap:7px}.suggestions button{padding:8px 10px;border-color:var(--line);text-align:left}.suggestions button span{display:block;color:var(--muted);font-size:10px;margin-top:3px}.suggestions button:hover span{color:#444}
     .signal{height:12px;border:1px solid var(--line);margin-top:8px;padding:2px}.signal i{display:block;height:100%;width:0;background:#fff;transition:width .06s linear}
     .timeline{min-height:390px;display:flex;flex-direction:column}
     .timeline-head{display:flex;justify-content:space-between;gap:15px;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:12px}
@@ -81,14 +83,19 @@
         <div class="signal"><i id="signal"></i></div>
       </div>
       <div class="row">
-        <div class="field"><label class="label" for="chunkSeconds">Chunk length</label><select id="chunkSeconds"><option value="0.5">500 ms</option><option value="1" selected>1000 ms</option><option value="2">2000 ms</option><option value="4">4000 ms</option></select></div>
-        <div class="field"><label class="label" for="returnBuffer">Return buffer</label><select id="returnBuffer"><option value="0.25">250 ms</option><option value="0.5">500 ms</option><option value="1" selected>1000 ms</option><option value="2">2000 ms</option><option value="4">4000 ms</option></select></div>
+        <div class="field"><label class="label" for="chunkMs">Chunk duration</label><input id="chunkMs" type="number" min="500" max="10000" step="1" value="1000"></div>
+        <div class="field"><label class="label" for="latencyMs">Processing buffer</label><input id="latencyMs" type="number" min="500" max="30000" step="1" value="1000"></div>
       </div>
+      <div class="row">
+        <div class="field"><label class="label" for="bpm">Tempo</label><input id="bpm" type="number" min="20" max="400" step="0.01" value="120"></div>
+        <div class="field"><span class="label">End-to-end latency</span><div class="readout" id="totalLatency">2000 ms</div></div>
+      </div>
+      <div class="field"><span class="label">4/4 musical chunk suggestions</span><div class="suggestions" id="beatSuggestions"></div></div>
       <div class="row">
         <div class="field"><label class="label" for="edgeFade">Boundary fade</label><select id="edgeFade"><option value="0" selected>Off</option><option value="2">2 ms</option><option value="5">5 ms</option><option value="10">10 ms</option></select></div>
         <div class="field"><label class="label" for="outputGain">Output <output id="gainValue">0 dB</output></label><input id="outputGain" type="range" min="-30" max="6" step="1" value="0"></div>
       </div>
-      <p class="hint">Chunks are consecutive and never overlap. The return buffer is the processing deadline after each chunk finishes recording. Wear headphones to avoid feedback.</p>
+      <p class="hint">Chunks are consecutive and never overlap. Suggestions set the chunk duration; the processing buffer is the deadline after capture. True output delay is their sum. Wear headphones to avoid feedback.</p>
       <a id="download" class="download" download="sa3-live-session.webm">Download last session</a>
 
       <h2 style="margin-top:28px">Model</h2>
@@ -117,11 +124,28 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const ui={start:$('start'),stop:$('stop'),status:$('status'),statusDetail:$('statusDetail'),device:$('device'),devices:$('devices'),chunkSeconds:$('chunkSeconds'),returnBuffer:$('returnBuffer'),edgeFade:$('edgeFade'),outputGain:$('outputGain'),gainValue:$('gainValue'),model:$('model'),steps:$('steps'),prompt:$('prompt'),negativePrompt:$('negativePrompt'),cfg:$('cfg'),apg:$('apg'),sigma:$('sigma'),seed:$('seed'),inputLevel:$('inputLevel'),signal:$('signal'),captured:$('captured'),processed:$('processed'),dryCount:$('dryCount'),inference:$('inference'),realtime:$('realtime'),stream:$('stream'),log:$('log'),notice:$('notice'),download:$('download')};
+const ui={start:$('start'),stop:$('stop'),status:$('status'),statusDetail:$('statusDetail'),device:$('device'),devices:$('devices'),chunkMs:$('chunkMs'),latencyMs:$('latencyMs'),bpm:$('bpm'),totalLatency:$('totalLatency'),beatSuggestions:$('beatSuggestions'),edgeFade:$('edgeFade'),outputGain:$('outputGain'),gainValue:$('gainValue'),model:$('model'),steps:$('steps'),prompt:$('prompt'),negativePrompt:$('negativePrompt'),cfg:$('cfg'),apg:$('apg'),sigma:$('sigma'),seed:$('seed'),inputLevel:$('inputLevel'),signal:$('signal'),captured:$('captured'),processed:$('processed'),dryCount:$('dryCount'),inference:$('inference'),realtime:$('realtime'),stream:$('stream'),log:$('log'),notice:$('notice'),download:$('download')};
 const state={running:false,generation:0,ctx:null,media:null,source:null,worklet:null,mute:null,master:null,recordDest:null,recorder:null,recorded:[],recordUrl:null,blocks:[],blockOffset:0,queuedFrames:0,framesPerChunk:0,chunkSeconds:1,returnBuffer:1,startedAt:0,index:0,pending:[],processing:false,scheduled:new Map(),rows:new Map(),metrics:{captured:0,processed:0,dry:0,late:0,error:0,inference:[]},levelUpdated:0,wakeLock:null};
 
 function setStatus(title,detail){ui.status.textContent=title;ui.statusDetail.textContent=detail||''}
 function number(id,fallback){const value=Number(ui[id].value);return Number.isFinite(value)?value:fallback}
+function clamp(value,min,max){return Math.max(min,Math.min(max,value))}
+function timingValues(){const chunkMs=Math.round(clamp(number('chunkMs',1000),500,10000)),latencyMs=Math.round(clamp(number('latencyMs',1000),500,30000));return {chunkMs,latencyMs}}
+function updateTimingUI(){const {chunkMs,latencyMs}=timingValues();ui.chunkMs.value=chunkMs;ui.latencyMs.value=latencyMs;ui.totalLatency.textContent=`${chunkMs+latencyMs} ms`}
+function renderBeatSuggestions(){
+  const bpm=clamp(number('bpm',120),20,400),beatMs=60000/bpm,candidates=[['½ beat',.5],['1 beat',1],['2 beats',2],['1 bar',4],['2 bars',8],['4 bars',16]],seen=new Set();ui.bpm.value=String(Math.round(bpm*100)/100);ui.beatSuggestions.innerHTML='';
+  for(const [label,beats] of candidates){const ms=Math.round(beatMs*beats);if(ms<500||ms>10000||seen.has(ms))continue;seen.add(ms);const button=document.createElement('button');button.type='button';button.innerHTML=`${label}<span>${ms} ms</span>`;button.addEventListener('click',()=>{if(state.running)return;ui.chunkMs.value=ms;updateTimingUI()});ui.beatSuggestions.append(button)}
+}
+function maxOut(...values){try{window.max?.outlet?.(...values)}catch{}}
+function setExternalControl(name,value,min,max){if(state.running){maxOut('stream','error','controls_locked');return}const numeric=Number(value);if(!Number.isFinite(numeric))return;ui[name].value=clamp(numeric,min,max);updateTimingUI();if(name==='bpm')renderBeatSuggestions()}
+function setupMaxBridge(){
+  if(!window.max?.bindInlet)return;
+  window.max.bindInlet('stream',action=>{const command=String(action||'').toLowerCase();if(command==='start')start();else if(command==='stop')stop()});
+  window.max.bindInlet('bpm',value=>setExternalControl('bpm',value,20,400));
+  window.max.bindInlet('chunk',value=>setExternalControl('chunkMs',value,500,10000));
+  window.max.bindInlet('latency',value=>setExternalControl('latencyMs',value,500,30000));
+  maxOut('live_diffusion','ready');
+}
 function db(value){return value>1e-5?`${(20*Math.log10(value)).toFixed(1)} dB`:'−∞ dB'}
 function updateMetrics(){
   ui.captured.textContent=state.metrics.captured;
@@ -133,7 +157,7 @@ function updateMetrics(){
   ui.realtime.textContent=avg?`${(state.chunkSeconds*1000/avg).toFixed(2)}×`:'—';
 }
 function snapshotControls(){return {prompt:ui.prompt.value,negative_prompt:ui.negativePrompt.value,dit:ui.model.value,steps:String(Math.max(1,Math.min(64,number('steps',8)))),seed:ui.seed.value.trim(),cfg:String(number('cfg',1)),apg:String(number('apg',1)),sigma_max:String(Math.max(.01,number('sigma',.5)))}}
-function lockStreamControls(locked){for(const element of [ui.device,ui.devices,ui.chunkSeconds,ui.returnBuffer])element.disabled=locked}
+function lockStreamControls(locked){for(const element of [ui.device,ui.devices,ui.chunkMs,ui.latencyMs,ui.bpm,...ui.beatSuggestions.querySelectorAll('button')])element.disabled=locked}
 
 async function refreshDevices(){
   if(!navigator.mediaDevices?.enumerateDevices)return;
@@ -242,21 +266,21 @@ async function start(){
     state.ctx=ctx;state.media=media;state.source=ctx.createMediaStreamSource(media);state.worklet=new AudioWorkletNode(ctx,'sa3-live-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});state.mute=ctx.createGain();state.mute.gain.value=0;state.source.connect(state.worklet);state.worklet.connect(state.mute);state.mute.connect(ctx.destination);state.worklet.port.onmessage=event=>receiveBlock(event.data.left,event.data.right);
     state.master=ctx.createGain();state.master.gain.value=10**(number('outputGain',0)/20);state.master.connect(ctx.destination);state.recordDest=ctx.createMediaStreamDestination();state.master.connect(state.recordDest);
     state.recorded=[];if(window.MediaRecorder){state.recorder=new MediaRecorder(state.recordDest.stream);state.recorder.ondataavailable=event=>{if(event.data.size)state.recorded.push(event.data)};state.recorder.onstop=finishRecording;state.recorder.start(1000)}
-    state.running=true;state.generation++;state.chunkSeconds=number('chunkSeconds',1);state.returnBuffer=number('returnBuffer',1);state.framesPerChunk=Math.round(ctx.sampleRate*state.chunkSeconds);state.startedAt=ctx.currentTime;state.index=0;state.pending=[];state.processing=false;state.blocks=[];state.blockOffset=0;state.queuedFrames=0;state.scheduled.clear();state.metrics={captured:0,processed:0,dry:0,late:0,error:0,inference:[]};
-    ui.stream.innerHTML='<div class="empty">Capturing chunk 0000…</div>';ui.log.innerHTML='<div class="empty">Waiting for the first complete input chunk</div>';ui.notice.className='notice';ui.notice.textContent='Dry audio is scheduled continuously. Each successful SA3 result replaces its matching block before the playback deadline.';ui.download.classList.remove('visible');lockStreamControls(true);ui.stop.disabled=false;setStatus('Streaming',`${ctx.sampleRate} Hz capture · ${state.chunkSeconds*1000} ms non-overlapping chunks`);updateMetrics();await refreshDevices();
+    const timing=timingValues();state.running=true;state.generation++;state.chunkSeconds=timing.chunkMs/1000;state.returnBuffer=timing.latencyMs/1000;state.framesPerChunk=Math.round(ctx.sampleRate*state.chunkSeconds);state.startedAt=ctx.currentTime;state.index=0;state.pending=[];state.processing=false;state.blocks=[];state.blockOffset=0;state.queuedFrames=0;state.scheduled.clear();state.metrics={captured:0,processed:0,dry:0,late:0,error:0,inference:[]};
+    ui.stream.innerHTML='<div class="empty">Capturing chunk 0000…</div>';ui.log.innerHTML='<div class="empty">Waiting for the first complete input chunk</div>';ui.notice.className='notice';ui.notice.textContent='Dry audio is scheduled continuously. Each successful SA3 result replaces its matching block before the playback deadline.';ui.download.classList.remove('visible');lockStreamControls(true);ui.stop.disabled=false;setStatus('Streaming',`${ctx.sampleRate} Hz capture · ${state.chunkSeconds*1000} ms chunks · ${(state.chunkSeconds+state.returnBuffer)*1000} ms total latency`);updateMetrics();maxOut('stream','start');await refreshDevices();
     try{state.wakeLock=await navigator.wakeLock?.request('screen')}catch{}
-  }catch(error){ui.start.disabled=false;setStatus('Input unavailable',error.message);ui.notice.className='notice bad';ui.notice.textContent=error.message}
+  }catch(error){ui.start.disabled=false;setStatus('Input unavailable',error.message);ui.notice.className='notice bad';ui.notice.textContent=error.message;maxOut('stream','error',error.message)}
 }
 function finishRecording(){
   if(!state.recorded.length)return;const type=state.recorder?.mimeType||'audio/webm';if(state.recordUrl)URL.revokeObjectURL(state.recordUrl);state.recordUrl=URL.createObjectURL(new Blob(state.recorded,{type}));ui.download.href=state.recordUrl;ui.download.download=type.includes('ogg')?'sa3-live-session.ogg':'sa3-live-session.webm';ui.download.classList.add('visible')
 }
 async function stop(){
-  if(!state.running)return;state.running=false;state.generation++;lockStreamControls(false);ui.stop.disabled=true;ui.start.disabled=false;state.media?.getTracks().forEach(track=>track.stop());for(const chunk of state.scheduled.values())try{chunk.source.stop()}catch{}state.scheduled.clear();try{state.recorder?.stop()}catch{}try{state.source?.disconnect();state.worklet?.disconnect();state.mute?.disconnect();state.master?.disconnect()}catch{}try{await state.ctx?.close()}catch{}try{await state.wakeLock?.release()}catch{}state.ctx=null;state.media=null;state.pending=[];state.blocks=[];ui.signal.style.width='0';ui.inputLevel.textContent='−∞ dB';setStatus('Stopped',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback`)
+  if(!state.running)return;state.running=false;state.generation++;lockStreamControls(false);ui.stop.disabled=true;ui.start.disabled=false;state.media?.getTracks().forEach(track=>track.stop());for(const chunk of state.scheduled.values())try{chunk.source.stop()}catch{}state.scheduled.clear();try{state.recorder?.stop()}catch{}try{state.source?.disconnect();state.worklet?.disconnect();state.mute?.disconnect();state.master?.disconnect()}catch{}try{await state.ctx?.close()}catch{}try{await state.wakeLock?.release()}catch{}state.ctx=null;state.media=null;state.pending=[];state.blocks=[];ui.signal.style.width='0';ui.inputLevel.textContent='−∞ dB';setStatus('Stopped',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback`);maxOut('stream','stop')
 }
 
-ui.start.addEventListener('click',start);ui.stop.addEventListener('click',stop);ui.devices.addEventListener('click',refreshDevices);ui.outputGain.addEventListener('input',()=>{const value=number('outputGain',0);ui.gainValue.textContent=`${value} dB`;if(state.master)state.master.gain.setTargetAtTime(10**(value/20),state.ctx.currentTime,.01)});window.addEventListener('beforeunload',()=>{state.media?.getTracks().forEach(track=>track.stop())});
+ui.start.addEventListener('click',start);ui.stop.addEventListener('click',stop);ui.devices.addEventListener('click',refreshDevices);ui.chunkMs.addEventListener('change',updateTimingUI);ui.latencyMs.addEventListener('change',updateTimingUI);ui.bpm.addEventListener('change',()=>{renderBeatSuggestions();updateTimingUI()});ui.outputGain.addEventListener('input',()=>{const value=number('outputGain',0);ui.gainValue.textContent=`${value} dB`;if(state.master)state.master.gain.setTargetAtTime(10**(value/20),state.ctx.currentTime,.01)});window.addEventListener('beforeunload',()=>{state.media?.getTracks().forEach(track=>track.stop())});
 fetch('/api/info').then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);return data}).then(info=>{const labels={'sm-music':'Music Small','medium':'Music Medium','sm-sfx':'SFX Small'};ui.model.innerHTML='';info.dit_choices.forEach(value=>{const option=document.createElement('option');option.value=value;option.textContent=labels[value]||value;ui.model.append(option)});setStatus('Ready',`${info.backend.backend.toUpperCase()} · ${info.backend.device_name}`)}).catch(error=>setStatus('Backend unavailable',error.message));
-refreshDevices();if(!window.isSecureContext){ui.notice.className='notice bad';ui.notice.textContent='This LAN page is not a secure browser context, so audio input will be blocked. Use localhost on the server or configure HTTPS for LAN capture.'}
+updateTimingUI();renderBeatSuggestions();setupMaxBridge();refreshDevices();if(!window.isSecureContext){ui.notice.className='notice bad';ui.notice.textContent='This LAN page is not a secure browser context, so audio input will be blocked. Use localhost on the server, an SSH tunnel, or configure HTTPS for LAN capture.'}
 </script>
 </body>
 </html>

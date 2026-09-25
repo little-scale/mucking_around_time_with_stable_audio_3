@@ -158,6 +158,43 @@ The optional boundary fade defaults to off because independent, non-overlapping
 chunks would otherwise both attenuate at each join and create a short audible
 dip.
 
+The timing controls accept exact millisecond values. Chunk duration and
+processing buffer both have a 500 ms minimum. The displayed end-to-end latency
+is their sum. Entering a BPM creates clickable 4/4 suggestions for half-beat,
+beat, two-beat, bar and multi-bar chunk durations; suggestions outside the
+500–10000 ms live range are omitted.
+
+### Max / Max for Live with `jweb~`
+
+Load the page in a `jweb~` object rather than `jweb`. The page's Web Audio mix
+is connected to `AudioContext.destination`, so `jweb~` exposes it through its
+two MSP signal outlets. Connect those outlets to a stereo `gain~` / `dac~` in
+Max, or to the left and right device outputs in Max for Live.
+
+```text
+jweb~ @url http://127.0.0.1:7862/live-audio-diffusion
+```
+
+The page uses the `window.max` bridge injected by `jweb~` (this is distinct
+from the Node for Max `require("max-api")` module). Send these messages to the
+`jweb~` inlet while the stream is stopped:
+
+```text
+stream start
+stream stop
+bpm 120
+chunk 1000
+latency 1000
+```
+
+`chunk` and `latency` are milliseconds and clamp to their supported ranges.
+The page emits `live_diffusion ready`, `stream start`, `stream stop`, and
+`stream error <reason>` through the Max message bridge. Max handles these
+messages asynchronously on its low-priority queue; audio itself remains on the
+two signal outlets. See Cycling '74's
+[Web Browser and jweb guide](https://docs.cycling74.com/userguide/web_browser/)
+and [`jweb~` reference](https://docs.cycling74.com/reference/jweb~/).
+
 ## SAME Lab and OSC
 
 OSC is off by default. To enable it on a trusted LAN:
