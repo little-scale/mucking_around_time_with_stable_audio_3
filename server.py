@@ -55,7 +55,7 @@ STATIC = HERE / "static"
 RUN_ROOT = HERE / "output" / "monitor"
 RUN_ROOT.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.8.0")
+app = FastAPI(title="SA3 Graphical Pipeline Monitor", version="1.9.0")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 

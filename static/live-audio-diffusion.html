@@ -35,6 +35,11 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row.three{grid-template-columns:repeat(3,1fr)}
     .device-row{display:grid;grid-template-columns:1fr auto;gap:8px}.device-row button{padding:9px 11px}
     .readout{min-height:42px;border:1px solid var(--line);padding:10px;background:#090909;font:15px ui-monospace,SFMono-Regular,Menlo,monospace}
+    .sequence-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:28px 0 10px}.sequence-head h2{margin:0}.add-prompt{width:42px;height:42px;padding:0;font-size:22px}
+    .hearing-readout{border:1px solid var(--line);padding:10px 12px;margin-bottom:10px;color:var(--muted);font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.06em}
+    .hearing-readout.wet{background:#fff;color:#000;border-color:#fff}.hearing-readout.dry{color:var(--danger);border-color:var(--danger)}
+    .prompt-sequence{display:grid;gap:10px}.prompt-card{border:1px solid var(--line);padding:11px;background:#050505}.prompt-card.hearing{background:#fff;color:#000;border-color:#fff}
+    .prompt-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em}.prompt-badge{color:var(--muted)}.prompt-card.hearing .prompt-badge{color:#000;font-weight:700}.prompt-card textarea{min-height:70px}.prompt-card.hearing textarea{background:#fff;color:#000;border-color:#000}.prompt-remove{padding:4px 8px;border-color:var(--line);font-size:10px}.prompt-card.hearing .prompt-remove{border-color:#000;color:#000;background:#fff}.prompt-card.hearing .prompt-remove:hover:not(:disabled){background:#000;color:#fff}
     .suggestions{display:flex;flex-wrap:wrap;gap:7px}.suggestions button{padding:8px 10px;border-color:var(--line);text-align:left}.suggestions button span{display:block;color:var(--muted);font-size:10px;margin-top:3px}.suggestions button:hover span{color:#444}
     .signal{height:12px;border:1px solid var(--line);margin-top:8px;padding:2px}.signal i{display:block;height:100%;width:0;background:#fff;transition:width .06s linear}
     .timeline{min-height:390px;display:flex;flex-direction:column}
@@ -103,7 +108,10 @@
         <div class="field"><label class="label" for="model">DiT model</label><select id="model"><option value="sm-music">Music Small</option><option value="medium">Music Medium</option><option value="sm-sfx">SFX Small</option></select></div>
         <div class="field"><label class="label" for="steps">Steps</label><input id="steps" type="number" min="1" max="64" value="8"></div>
       </div>
-      <div class="field"><label class="label" for="prompt">Prompt</label><textarea id="prompt" placeholder="Describe the desired transformation"></textarea></div>
+      <div class="sequence-head"><h2>Prompt sequence</h2><button id="addPrompt" class="add-prompt" type="button" title="Add prompt" aria-label="Add prompt">+</button></div>
+      <div id="hearingPrompt" class="hearing-readout" aria-live="polite">Stopped · no prompt output</div>
+      <div id="promptSequence" class="prompt-sequence"></div>
+      <p class="hint">One prompt is assigned to each captured chunk, then the sequence loops. The inverted card is the processed prompt block currently being heard—not the prompt currently generating. Add or remove prompts while stopped.</p>
       <div class="field"><label class="label" for="negativePrompt">Negative prompt</label><input id="negativePrompt" placeholder="Optional exclusions"></div>
       <div class="row three">
         <div class="field"><label class="label" for="cfg">CFG</label><input id="cfg" type="number" min="0" max="20" step="0.1" value="1"></div>
@@ -124,8 +132,8 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const ui={start:$('start'),stop:$('stop'),status:$('status'),statusDetail:$('statusDetail'),device:$('device'),devices:$('devices'),chunkMs:$('chunkMs'),latencyMs:$('latencyMs'),bpm:$('bpm'),totalLatency:$('totalLatency'),beatSuggestions:$('beatSuggestions'),edgeFade:$('edgeFade'),outputGain:$('outputGain'),gainValue:$('gainValue'),model:$('model'),steps:$('steps'),prompt:$('prompt'),negativePrompt:$('negativePrompt'),cfg:$('cfg'),apg:$('apg'),sigma:$('sigma'),seed:$('seed'),inputLevel:$('inputLevel'),signal:$('signal'),captured:$('captured'),processed:$('processed'),dryCount:$('dryCount'),inference:$('inference'),realtime:$('realtime'),stream:$('stream'),log:$('log'),notice:$('notice'),download:$('download')};
-const state={running:false,generation:0,ctx:null,media:null,source:null,worklet:null,mute:null,master:null,recordDest:null,recorder:null,recorded:[],recordUrl:null,blocks:[],blockOffset:0,queuedFrames:0,framesPerChunk:0,chunkSeconds:1,returnBuffer:1,startedAt:0,index:0,pending:[],processing:false,scheduled:new Map(),rows:new Map(),metrics:{captured:0,processed:0,dry:0,late:0,error:0,inference:[]},levelUpdated:0,wakeLock:null};
+const ui={start:$('start'),stop:$('stop'),status:$('status'),statusDetail:$('statusDetail'),device:$('device'),devices:$('devices'),chunkMs:$('chunkMs'),latencyMs:$('latencyMs'),bpm:$('bpm'),totalLatency:$('totalLatency'),beatSuggestions:$('beatSuggestions'),edgeFade:$('edgeFade'),outputGain:$('outputGain'),gainValue:$('gainValue'),model:$('model'),steps:$('steps'),addPrompt:$('addPrompt'),promptSequence:$('promptSequence'),hearingPrompt:$('hearingPrompt'),negativePrompt:$('negativePrompt'),cfg:$('cfg'),apg:$('apg'),sigma:$('sigma'),seed:$('seed'),inputLevel:$('inputLevel'),signal:$('signal'),captured:$('captured'),processed:$('processed'),dryCount:$('dryCount'),inference:$('inference'),realtime:$('realtime'),stream:$('stream'),log:$('log'),notice:$('notice'),download:$('download')};
+const state={running:false,generation:0,ctx:null,media:null,source:null,worklet:null,mute:null,master:null,recordDest:null,recorder:null,recorded:[],recordUrl:null,blocks:[],blockOffset:0,queuedFrames:0,framesPerChunk:0,chunkSeconds:1,returnBuffer:1,startedAt:0,index:0,sequenceIndex:0,pending:[],processing:false,scheduled:new Map(),rows:new Map(),metrics:{captured:0,processed:0,dry:0,late:0,error:0,inference:[]},levelUpdated:0,wakeLock:null};
 
 function setStatus(title,detail){ui.status.textContent=title;ui.statusDetail.textContent=detail||''}
 function number(id,fallback){const value=Number(ui[id].value);return Number.isFinite(value)?value:fallback}
@@ -156,8 +164,35 @@ function updateMetrics(){
   const avg=values.length?values.reduce((a,b)=>a+b,0)/values.length:0;
   ui.realtime.textContent=avg?`${(state.chunkSeconds*1000/avg).toFixed(2)}×`:'—';
 }
-function snapshotControls(){return {prompt:ui.prompt.value,negative_prompt:ui.negativePrompt.value,dit:ui.model.value,steps:String(Math.max(1,Math.min(64,number('steps',8)))),seed:ui.seed.value.trim(),cfg:String(number('cfg',1)),apg:String(number('apg',1)),sigma_max:String(Math.max(.01,number('sigma',.5)))}}
-function lockStreamControls(locked){for(const element of [ui.device,ui.devices,ui.chunkMs,ui.latencyMs,ui.bpm,...ui.beatSuggestions.querySelectorAll('button')])element.disabled=locked}
+function promptCards(){return [...ui.promptSequence.querySelectorAll('.prompt-card')]}
+function promptValues(){return promptCards().map(card=>card.querySelector('textarea').value)}
+function refreshPromptCards(){
+  const cards=promptCards(),locked=state.running;
+  cards.forEach((card,index)=>{card.dataset.promptIndex=String(index);card.querySelector('.prompt-number').textContent=`Prompt ${String(index+1).padStart(2,'0')}`;card.querySelector('.prompt-remove').disabled=locked||cards.length===1});
+  ui.addPrompt.disabled=locked||cards.length>=32;
+}
+function addPrompt(value=''){
+  if(state.running||promptCards().length>=32)return;
+  const card=document.createElement('section');card.className='prompt-card';
+  const head=document.createElement('div');head.className='prompt-card-head';
+  const number=document.createElement('span');number.className='prompt-number';
+  const badge=document.createElement('span');badge.className='prompt-badge';badge.textContent='Queued';
+  const remove=document.createElement('button');remove.type='button';remove.className='prompt-remove';remove.textContent='Remove';remove.addEventListener('click',()=>{if(state.running||promptCards().length===1)return;card.remove();refreshPromptCards()});
+  head.append(number,badge,remove);
+  const textarea=document.createElement('textarea');textarea.className='prompt-input';textarea.placeholder='Describe the desired transformation';textarea.value=value;
+  card.append(head,textarea);ui.promptSequence.append(card);refreshPromptCards();textarea.focus();
+}
+function clearHearingPrompt(message='Stopped · no prompt output',kind=''){
+  promptCards().forEach(card=>{card.classList.remove('hearing');card.querySelector('.prompt-badge').textContent='Queued'});
+  ui.hearingPrompt.className=`hearing-readout${kind?` ${kind}`:''}`;ui.hearingPrompt.textContent=message;
+}
+function setHearingChunk(chunk){
+  if(chunk.kind!=='wet'){clearHearingPrompt(`Dry fallback · chunk ${String(chunk.index).padStart(4,'0')} · no processed prompt output`,'dry');maxOut('prompt','hearing',0,'dry');return}
+  const cards=promptCards(),card=cards[chunk.promptIndex];cards.forEach(item=>{item.classList.toggle('hearing',item===card);item.querySelector('.prompt-badge').textContent=item===card?'Hearing':'Queued'});
+  const label=`P${String(chunk.promptIndex+1).padStart(2,'0')}`,summary=chunk.promptText.trim().replace(/\s+/g,' ').slice(0,72)||'(empty prompt)';ui.hearingPrompt.className='hearing-readout wet';ui.hearingPrompt.textContent=`Hearing ${label} · chunk ${String(chunk.index).padStart(4,'0')} · ${summary}`;maxOut('prompt','hearing',chunk.promptIndex+1,chunk.promptText);
+}
+function snapshotControls(prompt){return {prompt,negative_prompt:ui.negativePrompt.value,dit:ui.model.value,steps:String(Math.max(1,Math.min(64,number('steps',8)))),seed:ui.seed.value.trim(),cfg:String(number('cfg',1)),apg:String(number('apg',1)),sigma_max:String(Math.max(.01,number('sigma',.5)))}}
+function lockStreamControls(locked){for(const element of [ui.device,ui.devices,ui.chunkMs,ui.latencyMs,ui.bpm,...ui.beatSuggestions.querySelectorAll('button')])element.disabled=locked;refreshPromptCards()}
 
 async function refreshDevices(){
   if(!navigator.mediaDevices?.enumerateDevices)return;
@@ -199,9 +234,9 @@ function sourceAt(buffer,when){const source=state.ctx.createBufferSource();sourc
 
 function addTimelineChunk(chunk){
   if(chunk.index===0)ui.stream.innerHTML='';
-  const element=document.createElement('div');element.className='chunk dry';element.innerHTML=`<span>${String(chunk.index).padStart(4,'0')}</span><b>DRY</b>`;ui.stream.append(element);while(ui.stream.children.length>12)ui.stream.firstChild.remove();chunk.element=element;
+  const promptLabel=`P${String(chunk.promptIndex+1).padStart(2,'0')}`,element=document.createElement('div');element.className='chunk dry';element.innerHTML=`<span>${String(chunk.index).padStart(4,'0')} · ${promptLabel}</span><b>DRY</b>`;ui.stream.append(element);while(ui.stream.children.length>12)ui.stream.firstChild.remove();chunk.element=element;
   if(chunk.index===0)ui.log.innerHTML='';
-  const row=document.createElement('div');row.className='log-row';row.innerHTML=`<span>#${String(chunk.index).padStart(4,'0')}</span><span>CAPTURED</span><span>Waiting for model</span><span>deadline ${Math.round(state.returnBuffer*1000)} ms</span>`;ui.log.prepend(row);while(ui.log.children.length>40)ui.log.lastChild.remove();chunk.row=row;
+  const row=document.createElement('div');row.className='log-row';row.innerHTML=`<span>#${String(chunk.index).padStart(4,'0')}</span><span>${promptLabel}</span><span>Waiting for model</span><span>deadline ${Math.round(state.returnBuffer*1000)} ms</span>`;ui.log.prepend(row);while(ui.log.children.length>40)ui.log.lastChild.remove();chunk.row=row;
 }
 function setChunkStatus(chunk,kind,message,timing=''){
   if(chunk.element){chunk.element.className=`chunk ${kind}`;chunk.element.querySelector('b').textContent=kind.toUpperCase()}
@@ -210,7 +245,7 @@ function setChunkStatus(chunk,kind,message,timing=''){
 
 function scheduleDry(chunk){
   chunk.kind='dry';chunk.source=sourceAt(dryBuffer(chunk.left,chunk.right),chunk.playAt);state.scheduled.set(chunk.index,chunk);
-  const token=state.generation;setTimeout(()=>{if(token!==state.generation||chunk.counted)return;chunk.counted=true;if(chunk.kind==='dry'){state.metrics.dry++;setChunkStatus(chunk,'dry',chunk.reason||'Dry fallback played','on time');updateMetrics()}},Math.max(0,(chunk.playAt-state.ctx.currentTime)*1000+30));
+  const token=state.generation;setTimeout(()=>{if(token!==state.generation||chunk.counted)return;chunk.counted=true;setHearingChunk(chunk);if(chunk.kind==='dry'){state.metrics.dry++;setChunkStatus(chunk,'dry',chunk.reason||'Dry fallback played','on time');updateMetrics()}},Math.max(0,(chunk.playAt-state.ctx.currentTime)*1000+30));
 }
 
 function pullFrames(count){
@@ -226,7 +261,8 @@ function receiveBlock(left,right){
 }
 function captureChunk(left,right){
   const index=state.index++,playAt=state.startedAt+(index+1)*state.chunkSeconds+state.returnBuffer;
-  const chunk={index,left,right,playAt,controls:snapshotControls(),capturedAt:performance.now()};
+  const prompts=promptValues(),promptIndex=state.sequenceIndex++%prompts.length,promptText=prompts[promptIndex];
+  const chunk={index,left,right,playAt,promptIndex,promptText,controls:snapshotControls(promptText),capturedAt:performance.now()};
   state.metrics.captured++;addTimelineChunk(chunk);scheduleDry(chunk);state.pending.push(chunk);
   while(state.pending.length>2){const stale=state.pending.shift();stale.reason='Skipped to preserve fixed latency';setChunkStatus(stale,'dry',stale.reason,'not sent')}
   updateMetrics();pump(state.generation);
@@ -266,8 +302,8 @@ async function start(){
     state.ctx=ctx;state.media=media;state.source=ctx.createMediaStreamSource(media);state.worklet=new AudioWorkletNode(ctx,'sa3-live-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});state.mute=ctx.createGain();state.mute.gain.value=0;state.source.connect(state.worklet);state.worklet.connect(state.mute);state.mute.connect(ctx.destination);state.worklet.port.onmessage=event=>receiveBlock(event.data.left,event.data.right);
     state.master=ctx.createGain();state.master.gain.value=10**(number('outputGain',0)/20);state.master.connect(ctx.destination);state.recordDest=ctx.createMediaStreamDestination();state.master.connect(state.recordDest);
     state.recorded=[];if(window.MediaRecorder){state.recorder=new MediaRecorder(state.recordDest.stream);state.recorder.ondataavailable=event=>{if(event.data.size)state.recorded.push(event.data)};state.recorder.onstop=finishRecording;state.recorder.start(1000)}
-    const timing=timingValues();state.running=true;state.generation++;state.chunkSeconds=timing.chunkMs/1000;state.returnBuffer=timing.latencyMs/1000;state.framesPerChunk=Math.round(ctx.sampleRate*state.chunkSeconds);state.startedAt=ctx.currentTime;state.index=0;state.pending=[];state.processing=false;state.blocks=[];state.blockOffset=0;state.queuedFrames=0;state.scheduled.clear();state.metrics={captured:0,processed:0,dry:0,late:0,error:0,inference:[]};
-    ui.stream.innerHTML='<div class="empty">Capturing chunk 0000…</div>';ui.log.innerHTML='<div class="empty">Waiting for the first complete input chunk</div>';ui.notice.className='notice';ui.notice.textContent='Dry audio is scheduled continuously. Each successful SA3 result replaces its matching block before the playback deadline.';ui.download.classList.remove('visible');lockStreamControls(true);ui.stop.disabled=false;setStatus('Streaming',`${ctx.sampleRate} Hz capture · ${state.chunkSeconds*1000} ms chunks · ${(state.chunkSeconds+state.returnBuffer)*1000} ms total latency`);updateMetrics();maxOut('stream','start');await refreshDevices();
+    const timing=timingValues();state.running=true;state.generation++;state.chunkSeconds=timing.chunkMs/1000;state.returnBuffer=timing.latencyMs/1000;state.framesPerChunk=Math.round(ctx.sampleRate*state.chunkSeconds);state.startedAt=ctx.currentTime;state.index=0;state.sequenceIndex=0;state.pending=[];state.processing=false;state.blocks=[];state.blockOffset=0;state.queuedFrames=0;state.scheduled.clear();state.metrics={captured:0,processed:0,dry:0,late:0,error:0,inference:[]};
+    ui.stream.innerHTML='<div class="empty">Capturing chunk 0000…</div>';ui.log.innerHTML='<div class="empty">Waiting for the first complete input chunk</div>';ui.notice.className='notice';ui.notice.textContent='Dry audio is scheduled continuously. Each successful SA3 result replaces its matching block before the playback deadline.';ui.download.classList.remove('visible');clearHearingPrompt('Waiting for first returned chunk');lockStreamControls(true);ui.stop.disabled=false;setStatus('Streaming',`${ctx.sampleRate} Hz capture · ${state.chunkSeconds*1000} ms chunks · ${(state.chunkSeconds+state.returnBuffer)*1000} ms total latency`);updateMetrics();maxOut('stream','start');await refreshDevices();
     try{state.wakeLock=await navigator.wakeLock?.request('screen')}catch{}
   }catch(error){ui.start.disabled=false;setStatus('Input unavailable',error.message);ui.notice.className='notice bad';ui.notice.textContent=error.message;maxOut('stream','error',error.message)}
 }
@@ -275,12 +311,12 @@ function finishRecording(){
   if(!state.recorded.length)return;const type=state.recorder?.mimeType||'audio/webm';if(state.recordUrl)URL.revokeObjectURL(state.recordUrl);state.recordUrl=URL.createObjectURL(new Blob(state.recorded,{type}));ui.download.href=state.recordUrl;ui.download.download=type.includes('ogg')?'sa3-live-session.ogg':'sa3-live-session.webm';ui.download.classList.add('visible')
 }
 async function stop(){
-  if(!state.running)return;state.running=false;state.generation++;lockStreamControls(false);ui.stop.disabled=true;ui.start.disabled=false;state.media?.getTracks().forEach(track=>track.stop());for(const chunk of state.scheduled.values())try{chunk.source.stop()}catch{}state.scheduled.clear();try{state.recorder?.stop()}catch{}try{state.source?.disconnect();state.worklet?.disconnect();state.mute?.disconnect();state.master?.disconnect()}catch{}try{await state.ctx?.close()}catch{}try{await state.wakeLock?.release()}catch{}state.ctx=null;state.media=null;state.pending=[];state.blocks=[];ui.signal.style.width='0';ui.inputLevel.textContent='−∞ dB';setStatus('Stopped',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback`);maxOut('stream','stop')
+  if(!state.running)return;state.running=false;state.generation++;lockStreamControls(false);clearHearingPrompt();ui.stop.disabled=true;ui.start.disabled=false;state.media?.getTracks().forEach(track=>track.stop());for(const chunk of state.scheduled.values())try{chunk.source.stop()}catch{}state.scheduled.clear();try{state.recorder?.stop()}catch{}try{state.source?.disconnect();state.worklet?.disconnect();state.mute?.disconnect();state.master?.disconnect()}catch{}try{await state.ctx?.close()}catch{}try{await state.wakeLock?.release()}catch{}state.ctx=null;state.media=null;state.pending=[];state.blocks=[];ui.signal.style.width='0';ui.inputLevel.textContent='−∞ dB';setStatus('Stopped',`${state.metrics.processed} processed · ${state.metrics.dry} dry fallback`);maxOut('stream','stop')
 }
 
-ui.start.addEventListener('click',start);ui.stop.addEventListener('click',stop);ui.devices.addEventListener('click',refreshDevices);ui.chunkMs.addEventListener('change',updateTimingUI);ui.latencyMs.addEventListener('change',updateTimingUI);ui.bpm.addEventListener('change',()=>{renderBeatSuggestions();updateTimingUI()});ui.outputGain.addEventListener('input',()=>{const value=number('outputGain',0);ui.gainValue.textContent=`${value} dB`;if(state.master)state.master.gain.setTargetAtTime(10**(value/20),state.ctx.currentTime,.01)});window.addEventListener('beforeunload',()=>{state.media?.getTracks().forEach(track=>track.stop())});
+ui.start.addEventListener('click',start);ui.stop.addEventListener('click',stop);ui.devices.addEventListener('click',refreshDevices);ui.addPrompt.addEventListener('click',()=>addPrompt());ui.chunkMs.addEventListener('change',updateTimingUI);ui.latencyMs.addEventListener('change',updateTimingUI);ui.bpm.addEventListener('change',()=>{renderBeatSuggestions();updateTimingUI()});ui.outputGain.addEventListener('input',()=>{const value=number('outputGain',0);ui.gainValue.textContent=`${value} dB`;if(state.master)state.master.gain.setTargetAtTime(10**(value/20),state.ctx.currentTime,.01)});window.addEventListener('beforeunload',()=>{state.media?.getTracks().forEach(track=>track.stop())});
 fetch('/api/info').then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);return data}).then(info=>{const labels={'sm-music':'Music Small','medium':'Music Medium','sm-sfx':'SFX Small'};ui.model.innerHTML='';info.dit_choices.forEach(value=>{const option=document.createElement('option');option.value=value;option.textContent=labels[value]||value;ui.model.append(option)});setStatus('Ready',`${info.backend.backend.toUpperCase()} · ${info.backend.device_name}`)}).catch(error=>setStatus('Backend unavailable',error.message));
-updateTimingUI();renderBeatSuggestions();setupMaxBridge();refreshDevices();if(!window.isSecureContext){ui.notice.className='notice bad';ui.notice.textContent='This LAN page is not a secure browser context, so audio input will be blocked. Use localhost on the server, an SSH tunnel, or configure HTTPS for LAN capture.'}
+addPrompt();updateTimingUI();renderBeatSuggestions();setupMaxBridge();refreshDevices();if(!window.isSecureContext){ui.notice.className='notice bad';ui.notice.textContent='This LAN page is not a secure browser context, so audio input will be blocked. Use localhost on the server, an SSH tunnel, or configure HTTPS for LAN capture.'}
 </script>
 </body>
 </html>

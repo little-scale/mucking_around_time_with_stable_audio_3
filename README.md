@@ -164,6 +164,20 @@ is their sum. Entering a BPM creates clickable 4/4 suggestions for half-beat,
 beat, two-beat, bar and multi-bar chunk durations; suggestions outside the
 500–10000 ms live range are omitted.
 
+The **Prompt sequence** starts with one prompt. Press **+** to add up to 32
+prompt cards. Each consecutive captured chunk uses the next prompt, and the
+list loops back to the first prompt at the end. All prompt cards share the
+current model, negative prompt, steps, CFG, APG, max sigma, and seed. For
+example, selecting a two-bar chunk makes every prompt card last for one
+two-bar input block before the next prompt is used.
+
+The inverted prompt card is deliberately driven by the scheduled audio output,
+not by request or GPU activity. It therefore shows the processed prompt result
+currently being heard. If a result misses its deadline and the dry input block
+plays instead, no prompt card is highlighted and the display says **DRY
+FALLBACK**. Prompt text can be edited while streaming and affects future
+chunks; adding and removing prompts is locked until stopped.
+
 ### Max / Max for Live with `jweb~`
 
 Load the page in a `jweb~` object rather than `jweb`. The page's Web Audio mix
@@ -188,8 +202,9 @@ latency 1000
 ```
 
 `chunk` and `latency` are milliseconds and clamp to their supported ranges.
-The page emits `live_diffusion ready`, `stream start`, `stream stop`, and
-`stream error <reason>` through the Max message bridge. Max handles these
+The page emits `live_diffusion ready`, `stream start`, `stream stop`,
+`stream error <reason>`, and `prompt hearing <number> <text>` through the Max
+message bridge. A dry fallback emits `prompt hearing 0 dry`. Max handles these
 messages asynchronously on its low-priority queue; audio itself remains on the
 two signal outlets. See Cycling '74's
 [Web Browser and jweb guide](https://docs.cycling74.com/userguide/web_browser/)

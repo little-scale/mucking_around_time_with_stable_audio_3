@@ -152,6 +152,11 @@ def test_live_audio_diffusion_page_and_chunk_api(tmp_path):
     assert "window.max.bindInlet('stream'" in page.text
     assert "maxOut('stream','start')" in page.text
     assert "maxOut('stream','stop')" in page.text
+    assert 'id="promptSequence"' in page.text
+    assert 'id="addPrompt"' in page.text
+    assert 'id="hearingPrompt"' in page.text
+    assert "promptIndex" in page.text
+    assert "setHearingChunk" in page.text
 
     wav = io.BytesIO()
     with wave.open(wav, "wb") as output:
